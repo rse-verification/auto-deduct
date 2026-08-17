@@ -17,31 +17,27 @@ SPEC.loader.exec_module(MODULE)
 
 
 class AutoDeductPipelineTests(unittest.TestCase):
-    def test_reachable_helper_without_contract_is_reported(self):
-        source = """
-        /*@ requires x >= 0; ensures x >= 0; */
-        int main(void) { return helper(1); }
-        int helper(int x) { return x + 1; }
-        int unused(void) { return 0; }
-        """
+    def test_missing_contract_names_come_from_isp_report(self):
+        with tempfile.TemporaryDirectory() as temp:
+            report = Path(temp) / MODULE.MISSING_CONTRACT_OUTPUT
+            report.write_text(
+                json.dumps({"missing_helper_contracts": ["helper_a", "helper_b"]}),
+                encoding="utf-8",
+            )
 
-        report = MODULE.contract_report(source, "main")
+            self.assertEqual(
+                MODULE.missing_contract_names(report), ["helper_a", "helper_b"]
+            )
 
-        self.assertEqual(report.reachable_functions, ["main", "helper"])
-        self.assertEqual(report.missing_contracts, ["helper"])
-        self.assertEqual(report.call_graph["main"], ["helper"])
+    def test_missing_isp_report_is_an_explicit_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            report = Path(temp) / MODULE.MISSING_CONTRACT_OUTPUT
 
-    def test_contract_on_helper_is_accepted(self):
-        source = """
-        /*@ ensures result == 1; */
-        int main(void) { return helper(); }
-        /*@ ensures result == 1; */
-        int helper(void) { return 1; }
-        """
+            with self.assertRaises(MODULE.PipelineError) as raised:
+                MODULE.missing_contract_names(report)
 
-        report = MODULE.contract_report(source, "main")
-
-        self.assertEqual(report.missing_contracts, [])
+            self.assertEqual(raised.exception.stage, "contract-check")
+            self.assertIn("did not produce", raised.exception.message)
 
     def test_cli_runs_all_stages_and_keeps_missing_report(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -57,6 +53,50 @@ class AutoDeductPipelineTests(unittest.TestCase):
             args = MODULE.parser().parse_args(
                 ["--output-dir", str(output), str(source)]
             )
+            commands = []
+
+            def fake_run(command, cwd, **_kwargs):
+                commands.append(command)
+                if "-saida" in command:
+                    (Path(cwd) / MODULE.SAIDA_OUTPUT).write_text(
+                        source.read_text(encoding="utf-8"), encoding="utf-8"
+                    )
+                if "-isp" in command:
+                    (Path(cwd) / MODULE.ISP_OUTPUT).write_text(
+                        source.read_text(encoding="utf-8"), encoding="utf-8"
+                    )
+                    (Path(cwd) / MODULE.MISSING_CONTRACT_OUTPUT).write_text(
+                        json.dumps({"missing_helper_contracts": ["helper"]}),
+                        encoding="utf-8",
+                    )
+                stdout = "Proved goals: 1 / 1\n" if "-wp" in command else "ok\n"
+                return MODULE.subprocess.CompletedProcess(command, 0, stdout, "")
+
+            with patch.object(MODULE.shutil, "which", return_value="/usr/bin/fake"), patch.object(
+                MODULE.subprocess, "run", side_effect=fake_run
+            ):
+                report = MODULE.run_pipeline(args)
+
+            self.assertEqual(report.status, "failed")
+            self.assertEqual([stage.name for stage in report.stages], [
+                "parse", "saida_tricera", "isp_eva", "contract_check", "wp"
+            ])
+            self.assertEqual(report.contract_report.missing_contracts, ["helper"])
+            self.assertEqual(report.contract_report.source, "ISP")
+            isp_command = commands[2]
+            self.assertIn("-isp-missing-helper-contracts", isp_command)
+            self.assertIn("-isp-missing-helper-contracts-json", isp_command)
+            self.assertEqual(source.read_text(encoding="utf-8").count("helper"), 2)
+
+    def test_pipeline_stops_when_isp_does_not_write_contract_report(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "example.c"
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            output = root / "results"
+            args = MODULE.parser().parse_args(
+                ["--output-dir", str(output), str(source)]
+            )
 
             def fake_run(command, cwd, **_kwargs):
                 if "-saida" in command:
@@ -67,9 +107,6 @@ class AutoDeductPipelineTests(unittest.TestCase):
                     (Path(cwd) / MODULE.ISP_OUTPUT).write_text(
                         source.read_text(encoding="utf-8"), encoding="utf-8"
                     )
-                    (Path(cwd) / MODULE.MISSING_CONTRACT_OUTPUT).write_text(
-                        json.dumps({"missing_contracts": ["helper"]}), encoding="utf-8"
-                    )
                 return MODULE.subprocess.CompletedProcess(command, 0, "ok\n", "")
 
             with patch.object(MODULE.shutil, "which", return_value="/usr/bin/fake"), patch.object(
@@ -78,11 +115,11 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 report = MODULE.run_pipeline(args)
 
             self.assertEqual(report.status, "failed")
-            self.assertEqual([stage.name for stage in report.stages], [
-                "parse", "saida_tricera", "contract_check", "isp_eva", "wp"
-            ])
-            self.assertEqual(report.contract_report.missing_contracts, ["helper"])
-            self.assertEqual(source.read_text(encoding="utf-8").count("helper"), 2)
+            self.assertEqual(
+                [stage.name for stage in report.stages],
+                ["parse", "saida_tricera", "isp_eva"],
+            )
+            self.assertIn("did not produce", report.errors[0]["message"])
 
     def test_stage_failure_keeps_actionable_stderr(self):
         with tempfile.TemporaryDirectory() as temp:

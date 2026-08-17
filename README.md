@@ -32,10 +32,15 @@ Frama-C WP verification
 text summary + report.json
 ```
 
-Saida invokes TriCera to infer functional contracts below a contracted entry
-point. ISP consumes that annotated source and uses Eva-derived states to infer
-auxiliary ACSL clauses. AutoDeduct relies on ISP's reachable-function report
-for missing-contract checks rather than maintaining a separate call graph.
+Saida is the Frama-C plugin that invokes TriCera to infer functional
+contracts for helper functions below a contracted entry point. ISP consumes
+that annotated C source and uses Eva-derived states to infer auxiliary ACSL
+clauses for WP. ISP also owns the reachable-function analysis: AutoDeduct
+passes ISP's `-isp-missing-helper-contracts` options through Frama-C and reads
+the resulting `missing-helper-contracts.json`. AutoDeduct does not reimplement
+the C parser or call graph, so function reachability and missing-contract
+semantics stay aligned with ISP. A missing reachable contract makes the final
+pipeline status `failed` even when a later command happens to exit zero.
 
 ## Build the Docker Image
 
@@ -69,11 +74,32 @@ The 1.0 image installs `autodeduct`, the CLI pipeline. Experimental contract-
 assistant and GUI/LLM workflows from earlier development remain outside this
 release profile and are not installed in the V1 image.
 
+## CLI Options
+
+```text
+autodeduct --help
+autodeduct --version
+autodeduct [options] SOURCE.c [SOURCE.c ...]
+```
+
+Useful options are `--entry-point`, `--output-dir`, `--include`,
+`--frama-c-option`, `--wp-option`, `--wp-rte`, `--timeout`, and `--json`.
+The output directory contains `inferred.c`, `out.c`,
+`missing-helper-contracts.json`, stage logs, and `report.json`.
+
+## Result and Failure Handling
+
+The CLI returns exit code `0` only when parsing, functional inference,
+auxiliary annotation inference, reachable-contract checking, and WP all pass.
+It returns exit code `1` for input, environment, timeout, parsing, inference,
+annotation, contract, or WP failures. `--json` writes the same stage status,
+command, logs, artifacts, and error information in machine-readable form.
+
 ## Repository Layout
 
 - `bin/autodeduct`: executable CLI entry point.
-- `bin/autodeduct_pipeline.py`: argument parsing, stage execution, contract
-  reachability checks, and report generation.
+- `bin/autodeduct_pipeline.py`: stage execution, ISP report handling, and
+  report generation.
 - `Dockerfiles/AutoDeductDockerfile`: Frama-C/Saida/TriCera/ISP environment.
 - `tests/test_autodeduct.py`: pipeline tests that do not require Docker.
 

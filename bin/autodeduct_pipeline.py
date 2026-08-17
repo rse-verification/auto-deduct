@@ -14,7 +14,6 @@ import shutil
 import subprocess
 import sys
 import time
-from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -24,16 +23,6 @@ VERSION = "1.0.0"
 SAIDA_OUTPUT = "inferred.c"
 ISP_OUTPUT = "out.c"
 MISSING_CONTRACT_OUTPUT = "missing-helper-contracts.json"
-IGNORED_CALL_NAMES = {
-    "if",
-    "for",
-    "while",
-    "switch",
-    "sizeof",
-    "_Alignof",
-    "_Generic",
-    "_Static_assert",
-}
 
 
 class PipelineError(Exception):
@@ -62,10 +51,9 @@ class StageResult:
 @dataclass
 class ContractReport:
     entry_point: str
-    functions: list[str]
-    reachable_functions: list[str]
     missing_contracts: list[str]
-    call_graph: dict[str, list[str]]
+    source: str
+    report_file: str
 
 
 @dataclass
@@ -77,15 +65,6 @@ class PipelineReport:
     stages: list[StageResult] = field(default_factory=list)
     contract_report: ContractReport | None = None
     errors: list[dict[str, str]] = field(default_factory=list)
-
-
-@dataclass
-class FunctionInfo:
-    name: str
-    start: int
-    body_start: int
-    body_end: int
-    has_contract: bool
 
 
 def parser() -> argparse.ArgumentParser:
@@ -147,119 +126,6 @@ def parser() -> argparse.ArgumentParser:
         help="one or more C source files; they are never modified",
     )
     return result
-
-
-def strip_comments_and_literals(source: str) -> str:
-    """Replace comments and literals with spaces while preserving newlines."""
-
-    pattern = re.compile(
-        r'("(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|//[^\n]*|/\*.*?\*/)',
-        re.DOTALL,
-    )
-
-    def replace(match: re.Match[str]) -> str:
-        value = match.group(0)
-        return "".join("\n" if char == "\n" else " " for char in value)
-
-    return pattern.sub(replace, source)
-
-
-def matching_brace(source: str, opening: int) -> int:
-    depth = 0
-    for index in range(opening, len(source)):
-        if source[index] == "{":
-            depth += 1
-        elif source[index] == "}":
-            depth -= 1
-            if depth == 0:
-                return index
-    return -1
-
-
-def has_contract_before(source: str, function_start: int) -> bool:
-    """Return whether an ACSL block directly precedes the function."""
-
-    acsl = list(re.finditer(r"/\*@.*?\*/", source, re.DOTALL))
-    if not acsl:
-        return False
-    candidates = [match for match in acsl if match.end() <= function_start]
-    if not candidates:
-        return False
-    candidate = candidates[-1]
-    between = source[candidate.end() : function_start]
-    between = re.sub(r"//[^\n]*|/\*(?!@).*?\*/", "", between, flags=re.DOTALL)
-    between = re.sub(r"^\s*#.*?$", "", between, flags=re.MULTILINE)
-    return not between.strip()
-
-
-def find_functions(source: str) -> dict[str, FunctionInfo]:
-    """Find ordinary C function definitions and their directly preceding ACSL."""
-
-    clean = strip_comments_and_literals(source)
-    definition = re.compile(
-        r"(?P<signature>(?:[A-Za-z_]\w*|\*)[\w\s\*]*?\b"
-        r"(?P<name>[A-Za-z_]\w*)\s*\([^;{}]*\))\s*\{",
-        re.MULTILINE,
-    )
-    functions: dict[str, FunctionInfo] = {}
-    for match in definition.finditer(clean):
-        name = match.group("name")
-        if name in IGNORED_CALL_NAMES or name in functions:
-            continue
-        body_start = clean.find("{", match.start(), match.end())
-        body_end = matching_brace(clean, body_start)
-        if body_end < 0:
-            continue
-        functions[name] = FunctionInfo(
-            name=name,
-            start=match.start(),
-            body_start=body_start,
-            body_end=body_end,
-            has_contract=has_contract_before(source, match.start()),
-        )
-    return functions
-
-
-def build_call_graph(source: str, functions: dict[str, FunctionInfo]) -> dict[str, list[str]]:
-    clean = strip_comments_and_literals(source)
-    known = set(functions)
-    graph: dict[str, list[str]] = {}
-    call = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
-    for function in functions.values():
-        body = clean[function.body_start + 1 : function.body_end]
-        calls: list[str] = []
-        for match in call.finditer(body):
-            name = match.group(1)
-            if name in known and name != function.name and name not in calls:
-                calls.append(name)
-        graph[function.name] = calls
-    return graph
-
-
-def contract_report(source: str, entry_point: str) -> ContractReport:
-    functions = find_functions(source)
-    graph = build_call_graph(source, functions)
-    if entry_point not in functions:
-        raise PipelineError(
-            "contract-check",
-            f"entry point '{entry_point}' was not found in the generated C source",
-        )
-    reachable: list[str] = []
-    pending = deque([entry_point])
-    while pending:
-        current = pending.popleft()
-        if current in reachable:
-            continue
-        reachable.append(current)
-        pending.extend(graph.get(current, []))
-    missing = [name for name in reachable if not functions[name].has_contract]
-    return ContractReport(
-        entry_point=entry_point,
-        functions=sorted(functions),
-        reachable_functions=reachable,
-        missing_contracts=missing,
-        call_graph=graph,
-    )
 
 
 def write_text(path: Path, content: str) -> None:
@@ -363,19 +229,33 @@ def persist_report(report: PipelineReport) -> None:
     write_text(output_dir / "report.json", json.dumps(report_dict(report), indent=2) + "\n")
 
 
-def missing_contract_names(path: Path) -> list[str] | None:
-    """Read the ISP JSON report while tolerating its small format variations."""
+def missing_contract_names(path: Path) -> list[str]:
+    """Read ISP's missing-helper report and fail clearly if it is unusable."""
 
     if not path.is_file():
-        return None
+        raise PipelineError(
+            "contract-check",
+            f"ISP did not produce the required report: {path.name}",
+        )
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
+    except OSError as error:
+        raise PipelineError(
+            "contract-check",
+            f"could not read ISP report {path.name}: {error}",
+        ) from error
+    except json.JSONDecodeError as error:
+        raise PipelineError(
+            "contract-check",
+            f"ISP report {path.name} is not valid JSON: {error.msg}",
+        ) from error
     if isinstance(value, list):
         return [str(item) for item in value]
     if not isinstance(value, dict):
-        return None
+        raise PipelineError(
+            "contract-check",
+            f"ISP report {path.name} must contain an object or list",
+        )
     for key in (
         "missing_contracts",
         "missing_helpers",
@@ -393,7 +273,10 @@ def missing_contract_names(path: Path) -> list[str] | None:
                     if name is not None:
                         names.append(str(name))
             return names
-    return None
+    raise PipelineError(
+        "contract-check",
+        f"ISP report {path.name} has no missing-helper-contracts field",
+    )
 
 
 def tricera_diagnostic(stage: StageResult) -> str | None:
@@ -507,26 +390,6 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
         report.errors.append({"stage": saida.name, "message": message})
         return report
 
-    try:
-        contracts = contract_report(inferred.read_text(encoding="utf-8", errors="replace"), args.entry_point)
-        report.contract_report = contracts
-        write_text(output_dir / "contracts.json", json.dumps(asdict(contracts), indent=2) + "\n")
-        contract_stage = StageResult(
-            name="contract_check",
-            description="Check contracts on functions reachable from the entry point",
-            status="warning" if contracts.missing_contracts else "passed",
-            artifact=str(output_dir / "contracts.json"),
-            error=(
-                "missing contracts: " + ", ".join(contracts.missing_contracts)
-                if contracts.missing_contracts
-                else None
-            ),
-        )
-        report.stages.append(contract_stage)
-    except PipelineError as error:
-        report.errors.append({"stage": error.stage, "message": error.message})
-        return report
-
     isp = run_stage(
         name="isp_eva",
         description="Infer auxiliary annotations with ISP using Eva abstract states",
@@ -555,13 +418,34 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
         report.errors.append({"stage": isp.name, "message": message})
         return report
 
-    plugin_missing = missing_contract_names(output_dir / MISSING_CONTRACT_OUTPUT)
-    if plugin_missing is not None and report.contract_report is not None:
-        report.contract_report.missing_contracts = plugin_missing
-        write_text(
-            output_dir / "contracts.json",
-            json.dumps(asdict(report.contract_report), indent=2) + "\n",
+    try:
+        plugin_missing = missing_contract_names(output_dir / MISSING_CONTRACT_OUTPUT)
+    except PipelineError as error:
+        report.errors.append({"stage": error.stage, "message": error.message})
+        return report
+
+    report.contract_report = ContractReport(
+        entry_point=args.entry_point,
+        missing_contracts=plugin_missing,
+        source="ISP",
+        report_file=str(output_dir / MISSING_CONTRACT_OUTPUT),
+    )
+    write_text(
+        output_dir / "contracts.json",
+        json.dumps(asdict(report.contract_report), indent=2) + "\n",
+    )
+    contract_stage = StageResult(
+        name="contract_check",
+        description="Use ISP's reachable-function contract report",
+        status="warning" if plugin_missing else "passed",
+        artifact=str(output_dir / "contracts.json"),
+        error=(
+            "missing contracts: " + ", ".join(plugin_missing)
+            if plugin_missing
+            else None
         )
+    )
+    report.stages.append(contract_stage)
 
     wp_options = [*options, *args.wp_option]
     if args.wp_rte:
