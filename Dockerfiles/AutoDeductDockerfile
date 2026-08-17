@@ -26,7 +26,7 @@
 #
 FROM ubuntu:24.04 AS auto-deduct-base
 
-ARG CERT="./cert/scania-it-tls-inspect-root.crt"
+ARG CERT="./Dockerfiles/cert/scania-it-tls-inspect-root.crt"
 ARG CERT_LOC="/usr/local/share/ca-certificates/"
 
 ARG PROXY_HOST=""
@@ -34,7 +34,9 @@ ARG PROXY_PORT=""
 
 ARG FRAMA_C_VER="31.0"
 ARG SAIDA_VER="v0.5.0"
-ARG ISP_VER="v0.3.1"
+# The JSON missing-helper report used by the CLI was added after v0.3.1.
+# Pin this to a release commit before publishing the V1 image.
+ARG ISP_VER="master"
 # ARG TRICERA_VER="v0.4"
 # This is a workaround until TriCera gets more regular releases.
 ARG TRICERA_VER="5324b60f43e3e90314a151d056e5559a0ec3d63e"
@@ -50,6 +52,7 @@ ARG UID="2000"
 # ocaml - used by Frama-C plugins
 # opam - ocaml package manager
 # openjdk - used by Scala
+# python3 - AutoDeduct command-line runner
 # Z3 - SMT solver for use by Frama-C
 # + a bunch of other libraries required by Frama-C
 #
@@ -205,11 +208,10 @@ RUN ln -s /home/dev/repos/tricera/tri && \
   ln -s /home/dev/repos/tricera/tri-client
 
 ##
-# Stage 5 - Add AutoDeduct Frama-C plugins
+# Stage 5 - Add AutoDeduct Frama-C plugins and CLI
 #
-# NOTE: ISP (Interface Specification Propagator) is currently a
-#   private GitHub project. You will have to download and install
-#   it after the container image has been built.
+# The V1 image packages the command-line pipeline only. GUI and LLM helpers
+# are intentionally outside this release profile.
 #
 FROM auto-deduct-tricera AS auto-deduct-toolchain
 
@@ -235,14 +237,14 @@ RUN . /home/dev/.profile && \
 RUN . /home/dev/.profile && \
   git clone --depth 1 https://github.com/rse-verification/auto-deduct-examples.git
 
-COPY --chmod=755 --chown=dev:dev bin/autodeduct-contract-assistant /home/dev/.local/bin/autodeduct-contract-assistant
-COPY --chmod=644 --chown=dev:dev bin/autodeduct_contract_assistant_*.py /home/dev/.local/bin/
-COPY --chmod=755 --chown=dev:dev bin/autodeduct-contract-assistant-gui /home/dev/.local/bin/autodeduct-contract-assistant-gui
+# Install the command as `autodeduct` on the system PATH, including for
+# non-interactive `docker run IMAGE autodeduct ...` invocations.
+COPY --chmod=0755 bin/autodeduct /usr/local/bin/autodeduct
+COPY --chmod=0755 bin/autodeduct_pipeline.py /usr/local/bin/autodeduct_pipeline.py
+
+# Non-interactive `docker run IMAGE autodeduct ...` does not source .profile.
+ENV PATH="/home/dev/.local/bin:/home/dev/.opam/default/bin:${PATH}"
 
 WORKDIR /home/dev
 
-# Enable use of X-server on docker host
-# For use with WSLg and Windows 11 please see:
-# https://stackoverflow.com/questions/73092750/how-to-show-gui-apps-from-docker-desktop-container-on-windows-11
-ENV DISPLAY=host.docker.internal:0.0
 CMD ["/usr/bin/bash", "-l"]
