@@ -72,6 +72,43 @@ docker build -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
 
 On Apple Silicon, add `--platform linux/amd64` to build and run commands.
 
+## Run the CLI without Docker
+
+Docker is optional. A host installation must already provide Python 3.10 or
+newer, Frama-C with the Saida and ISP plugins installed, the TriCera `tri`
+executable, and the SMT solvers used by WP. The Python CLI has no additional
+package dependencies.
+
+From the repository root, make the local command available on `PATH`:
+
+```shell
+chmod +x bin/autodeduct
+export PATH="$PWD/bin:$PATH"
+```
+
+Check the required host tools before running the pipeline:
+
+```shell
+python3 --version
+command -v frama-c
+command -v tri
+frama-c -plugins | grep -Ei "saida|isp"
+```
+
+Run the public ASE 2024 example directly on the host:
+
+```shell
+autodeduct \
+  --entry-point main \
+  --output-dir examples/ase-2024/autodeduct-output-local \
+  examples/ase-2024
+```
+
+The local tools must be compatible with the versions expected by the current
+branch. If a required executable or plugin is missing, the command reports an
+`environment` failure before changing any input file. Docker remains the
+reproducible way to obtain the complete matching toolchain.
+
 ## Run the CLI in Docker
 
 ```shell
