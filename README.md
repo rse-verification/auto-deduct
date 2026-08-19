@@ -42,20 +42,23 @@ the C parser or call graph, so function reachability and missing-contract
 semantics stay aligned with ISP. A missing reachable contract makes the final
 pipeline status `failed` even when a later command happens to exit zero.
 
-## Public paper example
+## Public ASE 2024 example
 
-The repository includes one public teaching example under
-`examples/paper-1046/`. It is based on the CruiseControl code published with
-Liu et al., *An Empirical Study of the Code Generation of Safety-Critical
-Software Using LLMs*, *Applied Sciences* 14(3), 1046 (2024):
-<https://doi.org/10.3390/app14031046>.
+The repository includes the public steering-system example under
+`examples/ase-2024/`. The source is copied from the
+[rse-verification/auto-deduct-examples](https://github.com/rse-verification/auto-deduct-examples/tree/main/ase-2024)
+repository and retained with its attribution.
 
-The public source is kept unchanged and is accompanied by its original
-license notice. The separate `harness.c` file adds an ACSL entry contract for
-AutoDeduct; it does not modify the paper source. This example uses only the
-standard `<stdio.h>` header and contains no Scania or private case-study
-files. See `examples/paper-1046/README.md` for provenance and the Docker
-command.
+The example is associated with the ASE 2024 paper *An Exercise in Mind
+Reading: Automatic Contract Inference for Frama-C*:
+<https://doi.org/10.1007/978-3-031-55608-1_13>.
+
+`stee.c` models a vehicle steering system. Its ACSL contract is attached to
+the entry point `main` and expresses five requirements about primary steering
+failure, vehicle movement, secondary steering, and electric-motor activation.
+The helper functions are intentionally left without complete contracts so the
+toolchain can infer them. See `examples/ase-2024/README.md` for provenance and
+the Docker command. No Scania or private case-study files are included.
 
 ## Build the Docker image
 
@@ -83,18 +86,48 @@ Use `--include` for header directories, `--output-dir` for generated artifacts,
 and `--json` for machine-readable reporting. The V1 pipeline accepts one C
 translation unit plus its headers.
 
-## Release Scope
+For a project directory, AutoDeduct recursively discovers `.c` translation
+units. Header files are not passed as source inputs; provide additional header
+directories with `--include`:
 
-The 1.0 image installs `autodeduct`, the CLI pipeline. Experimental contract-
+```shell
+docker run --rm \
+  -v "$PWD":/work \
+  -w /work \
+  auto-deduct:latest \
+  autodeduct \
+  --include /work/my-project/include \
+  --entry-point main \
+  --output-dir /work/my-project/autodeduct-output \
+  /work/my-project
+```
+
+For explicit source files or several translation units:
+
+The 1.0 image installs `autodeduct`, the CLI pipeline. Experimental
 assistant and GUI/LLM workflows from earlier development remain outside this
 release profile and are not installed in the V1 image.
 
-## CLI Options
+The command accepts C source files and project directories. Directory inputs
+are searched recursively for `.c` files; common build, VCS, dependency, and
+generated-output directories are skipped. Pass `--include` for header
+directories that are not next to the source files.
+Preprocessor/compiler flags can be passed with repeated
+`--frama-c-option`, for example:
+
+```shell
+autodeduct \
+  --frama-c-option=-cpp-extra-args=-DPLATFORM_TEST \
+  --include include \
+  src/main.c src/account.c
+```
+
+## CLI options
 
 ```text
 autodeduct --help
 autodeduct --version
-autodeduct [options] SOURCE.c [SOURCE.c ...]
+autodeduct [options] SOURCE_OR_DIRECTORY [SOURCE_OR_DIRECTORY ...]
 ```
 
 Useful options are `--entry-point`, `--output-dir`, `--include`,
@@ -116,7 +149,8 @@ command, logs, artifacts, and error information in machine-readable form.
 - `bin/autodeduct_pipeline.py`: stage execution, ISP report handling, and
   report generation.
 - `Dockerfiles/AutoDeductDockerfile`: Frama-C/Saida/TriCera/ISP environment.
-- `examples/paper-1046/`: attributed public paper example and harness.
+- `examples/ase-2024/`: attributed public steering-system example with an
+  entry-point contract.
 - `tests/test_autodeduct.py`: pipeline tests that do not require Docker.
 
 ## License

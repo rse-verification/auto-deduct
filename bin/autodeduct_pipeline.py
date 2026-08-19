@@ -23,11 +23,21 @@ VERSION = "1.0.0"
 SAIDA_OUTPUT = "inferred.c"
 ISP_OUTPUT = "out.c"
 MISSING_CONTRACT_OUTPUT = "missing-helper-contracts.json"
+IGNORED_SOURCE_DIRECTORIES = frozenset({
+    ".git",
+    ".hg",
+    ".svn",
+    "build",
+    "_build",
+    "dist",
+    "node_modules",
+})
 
 
 class PipelineError(Exception):
     """A user-facing error with a stable stage name."""
 
+    # Store the failing stage so the CLI can report actionable errors consistently.
     def __init__(self, stage: str, message: str):
         super().__init__(message)
         self.stage = stage
@@ -67,6 +77,7 @@ class PipelineReport:
     errors: list[dict[str, str]] = field(default_factory=list)
 
 
+# Define the V1 command-line interface and its supported analysis options.
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="autodeduct",
@@ -122,16 +133,18 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "sources",
         nargs="+",
-        metavar="SOURCE.c",
-        help="one or more C source files; they are never modified",
+        metavar="SOURCE_OR_DIRECTORY",
+        help="C source file(s) or project directory; inputs are never modified",
     )
     return result
 
 
+# Write generated content into the separate output directory without touching inputs.
 def write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8", errors="replace")
 
 
+# Execute one external analysis stage and capture its logs, timing, artifacts, and failures.
 def run_stage(
     *,
     name: str,
@@ -186,9 +199,19 @@ def run_stage(
         result.returncode = completed.returncode
         result.status = "passed" if completed.returncode == 0 else "failed"
         if completed.returncode != 0:
+            lines = [
+                line.strip()
+                for stream in (completed.stderr, completed.stdout)
+                for line in stream.splitlines()
+                if line.strip()
+            ]
             diagnostic = next(
-                (line.strip() for line in reversed(completed.stderr.splitlines()) if line.strip()),
-                "no diagnostic was written to stderr",
+                (
+                    line
+                    for line in lines
+                    if re.search(r"fatal error|user error|error:|aborted", line, re.IGNORECASE)
+                ),
+                lines[-1] if lines else "no diagnostic was written by the command",
             )
             result.error = f"command exited with status {completed.returncode}: {diagnostic}"
         result.stdout_file = str(output_dir / f"{name}.stdout.log")
@@ -199,28 +222,63 @@ def run_stage(
     return result
 
 
-def command_options(args: argparse.Namespace) -> list[str]:
+# Convert CLI options and source locations into Frama-C arguments for every stage.
+def command_options(
+    args: argparse.Namespace, inputs: Iterable[Path] = ()
+) -> list[str]:
     options = ["-main", args.entry_point]
+    include_paths: list[Path] = []
     for include in args.include:
-        options.extend(["-I", str(Path(include).expanduser().resolve())])
+        include_paths.append(Path(include).expanduser().resolve())
+    include_paths.extend(path.parent for path in inputs)
+    seen: set[Path] = set()
+    for include_path in include_paths:
+        if include_path not in seen:
+            options.append(f"-cpp-extra-args=-I{include_path}")
+            seen.add(include_path)
     options.extend(args.frama_c_option)
     return options
 
 
+# Validate source translation units before starting the external verification tools.
 def source_paths(values: Iterable[str]) -> list[Path]:
     paths: list[Path] = []
+    seen: set[Path] = set()
     for value in values:
         path = Path(value).expanduser().resolve()
-        if not path.is_file():
+        if path.is_file():
+            candidates = [path]
+        elif path.is_dir():
+            candidates = [
+                candidate
+                for candidate in sorted(path.rglob("*.c"))
+                if not any(
+                    part in IGNORED_SOURCE_DIRECTORIES
+                    or part.startswith("autodeduct-output")
+                    for part in candidate.relative_to(path).parts[:-1]
+                )
+            ]
+            if not candidates:
+                raise PipelineError(
+                    "input",
+                    f"directory contains no C source files: {value}",
+                )
+        else:
             raise PipelineError("input", f"source file does not exist: {value}")
-        paths.append(path)
+        for candidate in candidates:
+            resolved = candidate.resolve()
+            if resolved not in seen:
+                paths.append(resolved)
+                seen.add(resolved)
     return paths
 
 
+# Convert the typed pipeline result into JSON-serializable data for automation.
 def report_dict(report: PipelineReport) -> dict:
     return asdict(report)
 
 
+# Persist report.json so every run leaves a machine-readable result beside its logs.
 def persist_report(report: PipelineReport) -> None:
     """Always leave the machine-readable report beside the stage logs."""
 
@@ -229,6 +287,7 @@ def persist_report(report: PipelineReport) -> None:
     write_text(output_dir / "report.json", json.dumps(report_dict(report), indent=2) + "\n")
 
 
+# Read ISP's authoritative missing-contract report instead of maintaining a second call graph.
 def missing_contract_names(path: Path) -> list[str]:
     """Read ISP's missing-helper report and fail clearly if it is unusable."""
 
@@ -279,6 +338,7 @@ def missing_contract_names(path: Path) -> list[str]:
     )
 
 
+# Detect TriCera fallback warnings that Saida may otherwise hide behind a successful exit code.
 def tricera_diagnostic(stage: StageResult) -> str | None:
     """Detect the fallback that Saida otherwise reports only as a warning."""
 
@@ -294,6 +354,7 @@ def tricera_diagnostic(stage: StageResult) -> str | None:
     return None
 
 
+# Check that WP emitted a complete proved-goal summary before accepting verification.
 def wp_diagnostic(stage: StageResult) -> str | None:
     """Require WP to print a complete proved-goal summary."""
 
@@ -309,6 +370,7 @@ def wp_diagnostic(stage: StageResult) -> str | None:
     return None
 
 
+# Print a compact human-readable summary for interactive CLI use.
 def print_human_report(report: PipelineReport) -> None:
     print(f"AutoDeduct {report.version}: {report.status.upper()}")
     print(f"Results: {report.output_directory}")
@@ -325,6 +387,7 @@ def print_human_report(report: PipelineReport) -> None:
         print(f"ERROR [{error['stage']}]: {error['message']}", file=sys.stderr)
 
 
+# Run the Saida/TriCera, ISP/Eva, contract-check, and WP stages in V1 order.
 def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     inputs = source_paths(args.sources)
     output_dir = Path(args.output_dir).expanduser().resolve()
@@ -347,7 +410,7 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
         )
         return report
 
-    options = command_options(args)
+    options = command_options(args, inputs)
     files = [str(path) for path in inputs]
     parse = run_stage(
         name="parse",
@@ -480,6 +543,7 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     return report
 
 
+# Parse arguments, convert failures into reports, and return a CI-friendly exit code.
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:

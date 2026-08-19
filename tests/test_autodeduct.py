@@ -29,6 +29,55 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.missing_contract_names(report), ["helper_a", "helper_b"]
             )
 
+    def test_include_paths_are_forwarded_to_the_c_preprocessor(self):
+        args = MODULE.parser().parse_args(["--include", "include", "example.c"])
+
+        self.assertIn(
+            f"-cpp-extra-args=-I{Path('include').resolve()}",
+            MODULE.command_options(args),
+        )
+
+    def test_directory_inputs_expand_c_files_and_skip_generated_directories(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "src").mkdir()
+            (root / "src" / "nested").mkdir()
+            (root / "build").mkdir()
+            (root / "autodeduct-output").mkdir()
+            (root / "src" / "main.c").write_text("int main(void) { return 0; }\n")
+            (root / "src" / "nested" / "helper.c").write_text("void helper(void) {}\n")
+            (root / "build" / "generated.c").write_text("void generated(void) {}\n")
+            (root / "autodeduct-output" / "out.c").write_text("void output(void) {}\n")
+
+            paths = MODULE.source_paths([str(root)])
+
+            self.assertEqual(
+                paths,
+                [
+                    (root / "src" / "main.c").resolve(),
+                    (root / "src" / "nested" / "helper.c").resolve(),
+                ],
+            )
+
+    def test_directory_without_c_files_is_an_input_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaises(MODULE.PipelineError) as raised:
+                MODULE.source_paths([temp])
+
+            self.assertEqual(raised.exception.stage, "input")
+            self.assertIn("no C source files", raised.exception.message)
+
+    def test_source_directories_are_forwarded_for_generated_sources(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "main.c"
+            source.write_text("int main(void) { return 0; }\n")
+            args = MODULE.parser().parse_args([str(source)])
+
+            self.assertIn(
+                f"-cpp-extra-args=-I{source.parent}",
+                MODULE.command_options(args, [source]),
+            )
+
     def test_missing_isp_report_is_an_explicit_error(self):
         with tempfile.TemporaryDirectory() as temp:
             report = Path(temp) / MODULE.MISSING_CONTRACT_OUTPUT
@@ -139,6 +188,24 @@ class AutoDeductPipelineTests(unittest.TestCase):
 
             self.assertEqual(result.status, "failed")
             self.assertIn("missing header", result.error)
+
+    def test_stage_failure_uses_stdout_when_stderr_is_empty(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            completed = MODULE.subprocess.CompletedProcess(
+                ["frama-c"], 1, "[kernel] User Error: invalid option\n", ""
+            )
+            with patch.object(MODULE.subprocess, "run", return_value=completed):
+                result = MODULE.run_stage(
+                    name="parse",
+                    description="parse",
+                    command=["frama-c"],
+                    cwd=output,
+                    output_dir=output,
+                    timeout=1,
+                )
+
+            self.assertIn("User Error: invalid option", result.error)
 
     def test_wp_requires_all_goals_to_be_proved(self):
         with tempfile.TemporaryDirectory() as temp:
