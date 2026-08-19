@@ -104,6 +104,16 @@ autodeduct \
   examples/ase-2024
 ```
 
+Alternatively, invoke the checkout-local executable directly without adding
+`bin/` to `PATH`:
+
+```shell
+./bin/autodeduct \
+  --entry-point main \
+  --output-dir examples/ase-2024/autodeduct-output-local \
+  examples/ase-2024
+```
+
 The local tools must be compatible with the versions expected by the current
 branch. If a required executable or plugin is missing, the command reports an
 `environment` failure before changing any input file. Docker remains the
