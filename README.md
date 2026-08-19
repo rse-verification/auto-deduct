@@ -119,6 +119,51 @@ branch. If a required executable or plugin is missing, the command reports an
 `environment` failure before changing any input file. Docker remains the
 reproducible way to obtain the complete matching toolchain.
 
+## Run the stages manually without Docker or the AutoDeduct CLI
+
+The `autodeduct` wrapper is optional. If the matching tools are installed on
+the host, each pipeline stage can also be run directly. This is useful for
+debugging one stage at a time or inspecting its intermediate output. The V1
+release has no GUI, so this manual workflow is still command-line based.
+
+From the repository root, run the following example:
+
+```shell
+PROJECT="$PWD/examples/ase-2024"
+OUT="$PWD/autodeduct-output-manual"
+mkdir -p "$OUT"
+cd "$OUT"
+CPP_INCLUDE="-cpp-extra-args=-I$PROJECT"
+
+# 1. Parse the source with Frama-C.
+frama-c -main main "$CPP_INCLUDE" "$PROJECT/stee.c"
+
+# 2. Infer functional contracts with Saida and TriCera.
+frama-c -main main "$CPP_INCLUDE" \
+  -saida -saida-tricera-path tri \
+  "-saida-out=$OUT/inferred.c" "$PROJECT/stee.c"
+
+# 3. Infer auxiliary annotations with ISP and Eva.
+frama-c -main main "$CPP_INCLUDE" \
+  -isp-entry-point main -isp \
+  -isp-missing-helper-contracts \
+  -isp-missing-helper-contracts-json "$OUT/missing-helper-contracts.json" \
+  "$OUT/inferred.c" -isp-print-file out.c
+
+# 4. Verify the generated source with WP.
+frama-c -main main "$CPP_INCLUDE" -wp "$OUT/out.c"
+```
+
+The intermediate files are written to `autodeduct-output-manual/`:
+
+* `inferred.c` is Saida's functional-contract output.
+* `out.c` is ISP's auxiliary-annotation output.
+* `missing-helper-contracts.json` is ISP's reachable-contract report.
+
+For projects with multiple C files, replace `stee.c` with the required source
+file list in each command. Use additional `-cpp-extra-args=-I/path/to/include`
+arguments for header directories.
+
 ## Run the CLI in Docker
 
 ```shell
