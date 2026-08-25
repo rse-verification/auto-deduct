@@ -245,6 +245,12 @@ command, logs, artifacts, and error information in machine-readable form.
   entry-point contract.
 - `tests/test_autodeduct.py`: pipeline tests that do not require Docker.
 
+The underlying plugins remain experimental. In particular, ISP does not yet
+support recursive auxiliary annotation generation for nested alternating
+array/struct paths such as `records[slot].f1[i].f2[j]`. For this pattern, ISP
+reports `ISP-E010` and AutoDeduct fails the `isp_eva` stage rather than
+presenting generated output as a complete proof.
+
 ## License
 
 AutoDeduct is provided under the GNU GPLv2. See [LICENSE](LICENSE).
