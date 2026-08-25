@@ -70,7 +70,51 @@ cd auto-deduct
 docker build -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
 ```
 
-On Apple Silicon, add `--platform linux/amd64` to build and run commands.
+On Apple Silicon, build and run the image as `linux/amd64` so the TriCera
+preprocessing helper runs with its supported architecture:
+
+```shell
+docker build --platform linux/amd64 \
+  -t auto-deduct:latest \
+  -f Dockerfiles/AutoDeductDockerfile .
+```
+
+Behind a proxy, add the build arguments used by the image:
+
+```shell
+docker build \
+  --build-arg PROXY_HOST=<proxy-host> \
+  --build-arg PROXY_PORT=<proxy-port> \
+  -t auto-deduct:latest \
+  -f Dockerfiles/AutoDeductDockerfile .
+```
+
+The Dockerfile accepts `SAIDA_VER`, `TRICERA_VER`, and `ISP_VER` build
+arguments. Each value may be a branch, tag, or commit reachable from the
+corresponding upstream repository. The defaults are unchanged. For example,
+to test approved component fixes without changing the CLI:
+
+```shell
+docker build \
+  --build-arg SAIDA_VER=<saida-branch-tag-or-commit> \
+  --build-arg TRICERA_VER=<tricera-branch-tag-or-commit> \
+  --build-arg ISP_VER=<isp-branch-tag-or-commit> \
+  -t auto-deduct:component-test \
+  -f Dockerfiles/AutoDeductDockerfile .
+```
+
+The image checks out each requested ref in detached-head mode, so a moving
+branch is resolved to the commit fetched during the build. The resolved
+commit is also stored in `REVISION` inside each component checkout under
+`/home/dev/repos/` (`saida/REVISION`, `tricera/REVISION`, and
+`interface-specification-propagator/REVISION`). Replace the placeholders only
+with refs that exist in the relevant upstream repository; this repository does
+not hard-code unapproved component-fix refs.
+
+The image contains configured versions of Frama-C, Saida, ISP, and TriCera.
+The image also contains the SMT solvers used by WP. The image is optional: the
+same `bin/autodeduct` command can run on a host where the matching tools and
+their dependencies are already installed.
 
 ## Run the CLI without Docker
 

@@ -196,9 +196,11 @@ USER dev
 WORKDIR /home/dev/repos
 
 RUN . /home/dev/.profile && \
-  git clone https://github.com/uuverifiers/tricera.git && \
+  git clone --no-checkout https://github.com/uuverifiers/tricera.git && \
   cd tricera && \
-  git checkout "${TRICERA_VER}" && \
+  git fetch --depth 1 origin "${TRICERA_VER}" && \
+  git checkout --detach FETCH_HEAD && \
+  git rev-parse HEAD > REVISION && \
   sed -i -e "s/1.4.0/1.9.8/" project/build.properties && \
   sbt assembly
 
@@ -222,15 +224,21 @@ USER dev
 WORKDIR /home/dev/repos
 
 RUN . /home/dev/.profile && \
-  git clone --depth 1 --branch "${SAIDA_VER}" https://github.com/rse-verification/saida.git && \
+  git clone --no-checkout https://github.com/rse-verification/saida.git && \
   cd saida && \
+  git fetch --depth 1 origin "${SAIDA_VER}" && \
+  git checkout --detach FETCH_HEAD && \
+  git rev-parse HEAD > REVISION && \
   dune build @install && \
   dune install && \
   why3 config detect
 
 RUN . /home/dev/.profile && \
-  git clone --depth 1 --branch "${ISP_VER}" https://github.com/rse-verification/interface-specification-propagator.git && \
+  git clone --no-checkout https://github.com/rse-verification/interface-specification-propagator.git && \
   cd interface-specification-propagator && \
+  git fetch --depth 1 origin "${ISP_VER}" && \
+  git checkout --detach FETCH_HEAD && \
+  git rev-parse HEAD > REVISION && \
   dune build @install && \
   dune install
 
