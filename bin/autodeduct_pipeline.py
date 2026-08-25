@@ -32,6 +32,24 @@ IGNORED_SOURCE_DIRECTORIES = frozenset({
     "dist",
     "node_modules",
 })
+SUPPORTED_SOURCE_SUFFIXES = frozenset({".c"})
+GENERATED_OUTPUT_NAMES = frozenset({
+    SAIDA_OUTPUT,
+    ISP_OUTPUT,
+    MISSING_CONTRACT_OUTPUT,
+    "contracts.json",
+    "report.json",
+    "parse.stdout.log",
+    "parse.stderr.log",
+    "saida_tricera.stdout.log",
+    "saida_tricera.stderr.log",
+    "isp_eva.stdout.log",
+    "isp_eva.stderr.log",
+    "contract_check.stdout.log",
+    "contract_check.stderr.log",
+    "wp.stdout.log",
+    "wp.stderr.log",
+})
 
 
 class PipelineError(Exception):
@@ -251,7 +269,9 @@ def source_paths(values: Iterable[str]) -> list[Path]:
         elif path.is_dir():
             candidates = [
                 candidate
-                for candidate in sorted(path.rglob("*.c"))
+                for candidate in sorted(path.rglob("*"))
+                if candidate.is_file()
+                and candidate.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES
                 if not any(
                     part in IGNORED_SOURCE_DIRECTORIES
                     or part.startswith("autodeduct-output")
@@ -271,6 +291,39 @@ def source_paths(values: Iterable[str]) -> list[Path]:
                 paths.append(resolved)
                 seen.add(resolved)
     return paths
+
+
+# Keep generated artifacts outside every source tree so the runner cannot overwrite inputs.
+def validate_output_directory(
+    inputs: Sequence[Path],
+    output_dir: Path,
+    source_roots: Iterable[Path] = (),
+) -> None:
+    output = output_dir.resolve()
+    roots = {path.resolve().parent for path in inputs}
+    roots.update(path.resolve() for path in source_roots)
+    for source_root in roots:
+        if output == source_root or source_root in output.parents:
+            raise PipelineError(
+                "output",
+                f"output directory {output} is inside the input source tree "
+                f"{source_root}; choose a separate output directory",
+            )
+
+
+# Remove only known AutoDeduct artifacts so a failed stage cannot reuse a previous run.
+def prepare_output_directory(output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for name in GENERATED_OUTPUT_NAMES:
+        artifact = output_dir / name
+        if artifact.is_symlink() or artifact.is_file():
+            artifact.unlink()
+        elif artifact.exists():
+            raise PipelineError(
+                "output",
+                f"generated artifact path is not a regular file: {artifact}; "
+                "choose another output directory",
+            )
 
 
 # Convert the typed pipeline result into JSON-serializable data for automation.
@@ -309,33 +362,52 @@ def missing_contract_names(path: Path) -> list[str]:
             f"ISP report {path.name} is not valid JSON: {error.msg}",
         ) from error
     if isinstance(value, list):
-        return [str(item) for item in value]
-    if not isinstance(value, dict):
+        items = value
+    elif isinstance(value, dict):
+        items = None
+        for key in (
+            "missing_contracts",
+            "missing_helpers",
+            "missing_helper_contracts",
+            "missing",
+        ):
+            if key in value:
+                items = value[key]
+                break
+        if items is None:
+            raise PipelineError(
+                "contract-check",
+                f"ISP report {path.name} has no missing-helper-contracts field",
+            )
+    else:
         raise PipelineError(
             "contract-check",
             f"ISP report {path.name} must contain an object or list",
         )
-    for key in (
-        "missing_contracts",
-        "missing_helpers",
-        "missing_helper_contracts",
-        "missing",
-    ):
-        items = value.get(key)
-        if isinstance(items, list):
-            names: list[str] = []
-            for item in items:
-                if isinstance(item, str):
-                    names.append(item)
-                elif isinstance(item, dict):
-                    name = item.get("function") or item.get("name")
-                    if name is not None:
-                        names.append(str(name))
-            return names
-    raise PipelineError(
-        "contract-check",
-        f"ISP report {path.name} has no missing-helper-contracts field",
-    )
+
+    if not isinstance(items, list):
+        raise PipelineError(
+            "contract-check",
+            f"ISP report {path.name} missing-helper field must be a list",
+        )
+
+    names: list[str] = []
+    for item in items:
+        if isinstance(item, str) and item.strip():
+            names.append(item)
+            continue
+        if isinstance(item, dict):
+            name = item.get("function") or item.get("name")
+            if isinstance(name, str) and name.strip():
+                names.append(name)
+                continue
+        raise PipelineError(
+            "contract-check",
+            f"ISP report {path.name} contains a malformed missing-helper entry; "
+            "each entry must be a non-empty function name or an object with a "
+            "non-empty 'function' or 'name' field",
+        )
+    return names
 
 
 # Detect TriCera fallback warnings that Saida may otherwise hide behind a successful exit code.
@@ -391,7 +463,12 @@ def print_human_report(report: PipelineReport) -> None:
 def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     inputs = source_paths(args.sources)
     output_dir = Path(args.output_dir).expanduser().resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    input_roots = []
+    for value in args.sources:
+        source = Path(value).expanduser().resolve()
+        input_roots.append(source if source.is_dir() else source.parent)
+    validate_output_directory(inputs, output_dir, input_roots)
+    prepare_output_directory(output_dir)
     report = PipelineReport(
         version=VERSION,
         status="failed",
@@ -566,7 +643,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     try:
-        persist_report(report)
+        if not any(error["stage"] == "output" for error in report.errors):
+            persist_report(report)
     except OSError as error:
         report.errors.append({"stage": "report", "message": str(error)})
         report.status = "failed"

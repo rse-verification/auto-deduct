@@ -59,6 +59,61 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 ],
             )
 
+    def test_directory_inputs_accept_uppercase_c_extension(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "UPPER.C"
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+
+            self.assertEqual(MODULE.source_paths([temp]), [source.resolve()])
+
+    def test_output_directory_cannot_be_inside_input_source_tree(self):
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "project"
+            project.mkdir()
+            source = project / "main.c"
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            output = project / "results"
+
+            with self.assertRaises(MODULE.PipelineError) as raised:
+                MODULE.validate_output_directory([source], output)
+
+            self.assertEqual(raised.exception.stage, "output")
+            self.assertIn("inside the input source tree", raised.exception.message)
+
+            with self.assertRaises(MODULE.PipelineError):
+                MODULE.validate_output_directory([source], output, [project])
+
+    def test_cli_does_not_write_report_to_an_unsafe_output_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "project"
+            project.mkdir()
+            source = project / "main.c"
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            output = project / "results"
+
+            with patch.object(MODULE, "print_human_report"):
+                result = MODULE.main(
+                    ["--output-dir", str(output), str(project)]
+                )
+
+            self.assertEqual(result, 1)
+            self.assertFalse(output.exists())
+
+    def test_prepare_output_directory_removes_only_known_artifacts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            stale = output / MODULE.SAIDA_OUTPUT
+            user_file = output / "keep.txt"
+            stale.write_text("old generated source\n", encoding="utf-8")
+            (output / "parse.stderr.log").write_text("old log\n", encoding="utf-8")
+            user_file.write_text("keep me\n", encoding="utf-8")
+
+            MODULE.prepare_output_directory(output)
+
+            self.assertFalse(stale.exists())
+            self.assertFalse((output / "parse.stderr.log").exists())
+            self.assertTrue(user_file.exists())
+
     def test_directory_without_c_files_is_an_input_error(self):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaises(MODULE.PipelineError) as raised:
@@ -88,17 +143,33 @@ class AutoDeductPipelineTests(unittest.TestCase):
             self.assertEqual(raised.exception.stage, "contract-check")
             self.assertIn("did not produce", raised.exception.message)
 
+    def test_malformed_isp_missing_helper_entry_is_an_explicit_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            report = Path(temp) / MODULE.MISSING_CONTRACT_OUTPUT
+            report.write_text(
+                json.dumps({"missing_helper_contracts": [{"unexpected": "value"}]}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(MODULE.PipelineError) as raised:
+                MODULE.missing_contract_names(report)
+
+            self.assertEqual(raised.exception.stage, "contract-check")
+            self.assertIn("malformed missing-helper entry", raised.exception.message)
+
     def test_cli_runs_all_stages_and_keeps_missing_report(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            source = root / "example.c"
+            project = root / "project"
+            project.mkdir()
+            source = project / "example.c"
             source.write_text(
                 "/*@ ensures result == 1; */\n"
                 "int main(void) { return helper(); }\n"
                 "int helper(void) { return 1; }\n",
                 encoding="utf-8",
             )
-            output = root / "results"
+            output = Path(temp) / "results"
             args = MODULE.parser().parse_args(
                 ["--output-dir", str(output), str(source)]
             )
@@ -140,9 +211,11 @@ class AutoDeductPipelineTests(unittest.TestCase):
     def test_pipeline_stops_when_isp_does_not_write_contract_report(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            source = root / "example.c"
+            project = root / "project"
+            project.mkdir()
+            source = project / "example.c"
             source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
-            output = root / "results"
+            output = Path(temp) / "results"
             args = MODULE.parser().parse_args(
                 ["--output-dir", str(output), str(source)]
             )
