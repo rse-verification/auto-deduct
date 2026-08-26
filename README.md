@@ -89,10 +89,11 @@ docker build \
   -f Dockerfiles/AutoDeductDockerfile .
 ```
 
-The Dockerfile accepts `SAIDA_VER`, `TRICERA_VER`, and `ISP_VER` build
-arguments. Each value may be a branch, tag, or commit reachable from the
-corresponding upstream repository. The defaults are unchanged. For example,
-to test approved component fixes without changing the CLI:
+The Dockerfile accepts `SAIDA_REPO`, `TRICERA_REPO`, and `ISP_REPO` repository
+URL arguments, plus `SAIDA_VER`, `TRICERA_VER`, and `ISP_VER` ref arguments.
+Each ref may be a branch, tag, or commit reachable from its selected
+repository. The repository defaults and component refs are unchanged. For
+example, to test approved component fixes without changing the CLI:
 
 ```shell
 docker build \
@@ -100,6 +101,17 @@ docker build \
   --build-arg TRICERA_VER=<tricera-branch-tag-or-commit> \
   --build-arg ISP_VER=<isp-branch-tag-or-commit> \
   -t auto-deduct:component-test \
+  -f Dockerfiles/AutoDeductDockerfile .
+```
+
+For a fix that exists only in a fork, provide that repository URL together
+with its branch or commit:
+
+```shell
+docker build \
+  --build-arg TRICERA_REPO=https://github.com/<user>/tricera.git \
+  --build-arg TRICERA_VER=<branch-or-commit> \
+  -t auto-deduct:component-fork-test \
   -f Dockerfiles/AutoDeductDockerfile .
 ```
 

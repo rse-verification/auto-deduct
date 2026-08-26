@@ -33,12 +33,15 @@ ARG PROXY_HOST=""
 ARG PROXY_PORT=""
 
 ARG FRAMA_C_VER="31.0"
+ARG SAIDA_REPO="https://github.com/rse-verification/saida.git"
 ARG SAIDA_VER="v0.5.0"
+ARG ISP_REPO="https://github.com/rse-verification/interface-specification-propagator.git"
 # The JSON missing-helper report used by the CLI was added after v0.3.1.
 # Pin this to a release commit before publishing the V1 image.
 ARG ISP_VER="master"
 # ARG TRICERA_VER="v0.4"
 # This is a workaround until TriCera gets more regular releases.
+ARG TRICERA_REPO="https://github.com/uuverifiers/tricera.git"
 ARG TRICERA_VER="5324b60f43e3e90314a151d056e5559a0ec3d63e"
 
 # This is the user id of "dev" user that will be created in the container
@@ -196,7 +199,7 @@ USER dev
 WORKDIR /home/dev/repos
 
 RUN . /home/dev/.profile && \
-  git clone --no-checkout https://github.com/uuverifiers/tricera.git && \
+  git clone --no-checkout "${TRICERA_REPO}" tricera && \
   cd tricera && \
   git fetch --depth 1 origin "${TRICERA_VER}" && \
   git checkout --detach FETCH_HEAD && \
@@ -224,7 +227,7 @@ USER dev
 WORKDIR /home/dev/repos
 
 RUN . /home/dev/.profile && \
-  git clone --no-checkout https://github.com/rse-verification/saida.git && \
+  git clone --no-checkout "${SAIDA_REPO}" saida && \
   cd saida && \
   git fetch --depth 1 origin "${SAIDA_VER}" && \
   git checkout --detach FETCH_HEAD && \
@@ -234,7 +237,7 @@ RUN . /home/dev/.profile && \
   why3 config detect
 
 RUN . /home/dev/.profile && \
-  git clone --no-checkout https://github.com/rse-verification/interface-specification-propagator.git && \
+  git clone --no-checkout "${ISP_REPO}" interface-specification-propagator && \
   cd interface-specification-propagator && \
   git fetch --depth 1 origin "${ISP_VER}" && \
   git checkout --detach FETCH_HEAD && \
