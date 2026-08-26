@@ -34,14 +34,14 @@ docker run --rm \
   auto-deduct:latest \
   autodeduct \
   --entry-point main \
-  --output-dir /work/examples/ase-2024/autodeduct-output \
+  --output-dir /work/autodeduct-output-ase-2024 \
   /work/examples/ase-2024
 ```
 
 The input directory contains only stee.c, but using a directory demonstrates
 that the V1 CLI accepts a project folder and keeps the example's source
 layout. Stage logs and report.json are written below
-examples/ase-2024/autodeduct-output/.
+autodeduct-output-ase-2024/ at the repository root, outside the input tree.
 
 The upstream source is distributed from the public
 auto-deduct-examples repository under GPL-2.0. The AutoDeduct repository

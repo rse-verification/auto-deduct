@@ -119,6 +119,10 @@ RUN  adduser --disabled-password --shell /usr/bin/bash --uid ${UID} --gecos "Dev
 USER dev
 WORKDIR /home/dev
 
+# Create later work directories as the unprivileged build user. Docker-created
+# WORKDIR paths can otherwise be root-owned on some builders.
+RUN mkdir -p /home/dev/repos /home/dev/.local/bin
+
 # Fix "less" charset settings.
 RUN echo "export LESSCHARSET=utf-8" >> .profile
 
@@ -147,7 +151,8 @@ ARG FRAMA_C_VER="31.0"
 USER dev
 WORKDIR /home/dev
 
-RUN opam init --disable-sandboxing --yes && \
+RUN : "${FRAMA_C_VER:?FRAMA_C_VER must not be empty}" && \
+  opam init --disable-sandboxing --yes && \
   opam init --shell-setup && \
   opam install "frama-c.${FRAMA_C_VER}" --yes && \
   opam install ocaml-lsp-server --yes && \
@@ -198,8 +203,10 @@ ARG TRICERA_VER="5324b60f43e3e90314a151d056e5559a0ec3d63e"
 USER dev
 WORKDIR /home/dev/repos
 
-RUN . /home/dev/.profile && \
-  git clone --no-checkout "${TRICERA_REPO}" tricera && \
+RUN : "${TRICERA_REPO:?TRICERA_REPO must not be empty}" && \
+  : "${TRICERA_VER:?TRICERA_VER must not be empty}" && \
+  . /home/dev/.profile && \
+  git clone --depth 1 --no-checkout "${TRICERA_REPO}" tricera && \
   cd tricera && \
   git fetch --depth 1 origin "${TRICERA_VER}" && \
   git checkout --detach FETCH_HEAD && \
@@ -226,8 +233,10 @@ ARG ISP_VER="v0.3.1"
 USER dev
 WORKDIR /home/dev/repos
 
-RUN . /home/dev/.profile && \
-  git clone --no-checkout "${SAIDA_REPO}" saida && \
+RUN : "${SAIDA_REPO:?SAIDA_REPO must not be empty}" && \
+  : "${SAIDA_VER:?SAIDA_VER must not be empty}" && \
+  . /home/dev/.profile && \
+  git clone --depth 1 --no-checkout "${SAIDA_REPO}" saida && \
   cd saida && \
   git fetch --depth 1 origin "${SAIDA_VER}" && \
   git checkout --detach FETCH_HEAD && \
@@ -236,8 +245,10 @@ RUN . /home/dev/.profile && \
   dune install && \
   why3 config detect
 
-RUN . /home/dev/.profile && \
-  git clone --no-checkout "${ISP_REPO}" interface-specification-propagator && \
+RUN : "${ISP_REPO:?ISP_REPO must not be empty}" && \
+  : "${ISP_VER:?ISP_VER must not be empty}" && \
+  . /home/dev/.profile && \
+  git clone --depth 1 --no-checkout "${ISP_REPO}" interface-specification-propagator && \
   cd interface-specification-propagator && \
   git fetch --depth 1 origin "${ISP_VER}" && \
   git checkout --detach FETCH_HEAD && \

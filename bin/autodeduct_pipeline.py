@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -49,6 +52,18 @@ GENERATED_OUTPUT_NAMES = frozenset({
     "contract_check.stderr.log",
     "wp.stdout.log",
     "wp.stderr.log",
+})
+PIPELINE_OWNED_OPTIONS = frozenset({
+    "-main",
+    "-then",
+    "-then-last",
+    "-then-on",
+    "-wp",
+    "-no-wp",
+    "-saida",
+    "-no-saida",
+    "-isp",
+    "-no-isp",
 })
 
 
@@ -95,6 +110,38 @@ class PipelineReport:
     errors: list[dict[str, str]] = field(default_factory=list)
 
 
+# Reject non-positive timeouts at argument parsing instead of starting a stage
+# that is guaranteed to time out immediately.
+def positive_timeout(value: str) -> float:
+    timeout = float(value)
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise argparse.ArgumentTypeError(
+            "timeout must be a finite number greater than zero"
+        )
+    return timeout
+
+
+# Prevent forwarded options from changing the pipeline topology or the
+# entry-point recorded in the report.
+def validate_forwarded_options(args: argparse.Namespace) -> None:
+    for cli_name, values in (
+        ("--frama-c-option", args.frama_c_option),
+        ("--wp-option", args.wp_option),
+    ):
+        for value in values:
+            option = value.strip().split(maxsplit=1)[0].split("=", 1)[0]
+            if (
+                option in PIPELINE_OWNED_OPTIONS
+                or option.startswith("-saida-")
+                or option.startswith("-isp-")
+            ):
+                raise PipelineError(
+                    "input",
+                    f"{cli_name} cannot override pipeline-owned option "
+                    f"{option}; use AutoDeduct's dedicated CLI option instead",
+                )
+
+
 # Define the V1 command-line interface and its supported analysis options.
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
@@ -118,9 +165,12 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument(
         "--timeout",
-        type=float,
+        type=positive_timeout,
         default=300.0,
-        help="maximum seconds for each Frama-C stage (default: %(default)s)",
+        help=(
+            "finite positive maximum seconds for each Frama-C stage "
+            "(default: %(default)s)"
+        ),
     )
     result.add_argument(
         "--frama-c-option",
@@ -152,7 +202,10 @@ def parser() -> argparse.ArgumentParser:
         "sources",
         nargs="+",
         metavar="SOURCE_OR_DIRECTORY",
-        help="C source file(s) or project directory; inputs are never modified",
+        help=(
+            "one C source file or project directory containing exactly one "
+            "C translation unit; inputs are never modified"
+        ),
     )
     return result
 
@@ -244,6 +297,8 @@ def run_stage(
             list(command),
             cwd=cwd,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             timeout=timeout,
             check=False,
@@ -252,6 +307,14 @@ def run_stage(
         result.status = "error"
         result.error = f"executable not found: {error.filename}"
         result.returncode = 127
+        completed = None
+    except OSError as error:
+        result.status = "error"
+        result.error = (
+            "could not start command: "
+            f"{error.strerror or error}"
+        )
+        result.returncode = error.errno or 1
         completed = None
     except subprocess.TimeoutExpired as error:
         result.status = "timeout"
@@ -301,7 +364,9 @@ def command_options(
     seen: set[Path] = set()
     for include_path in include_paths:
         if include_path not in seen:
-            options.append(f"-cpp-extra-args=-I{include_path}")
+            options.append(
+                f"-cpp-extra-args=-I{shlex.quote(str(include_path))}"
+            )
             seen.add(include_path)
     options.extend(args.frama_c_option)
     return options
@@ -322,17 +387,32 @@ def source_paths(values: Iterable[str]) -> list[Path]:
                 )
             candidates = [path]
         elif path.is_dir():
-            candidates = [
-                candidate
-                for candidate in sorted(path.rglob("*"))
-                if candidate.is_file()
-                and candidate.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES
-                if not any(
-                    part in IGNORED_SOURCE_DIRECTORIES
-                    or part.startswith("autodeduct-output")
-                    for part in candidate.relative_to(path).parts[:-1]
+            candidates = []
+
+            def discovery_error(error: OSError) -> None:
+                raise PipelineError(
+                    "input",
+                    f"could not read source directory {error.filename}: "
+                    f"{error.strerror or error}",
                 )
-            ]
+
+            for current_root, directories, filenames in os.walk(
+                path, onerror=discovery_error
+            ):
+                directories[:] = sorted(
+                    directory
+                    for directory in directories
+                    if directory not in IGNORED_SOURCE_DIRECTORIES
+                    and not directory.startswith("autodeduct-output")
+                )
+                root = Path(current_root)
+                for filename in sorted(filenames):
+                    candidate = root / filename
+                    if (
+                        candidate.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES
+                        and candidate.is_file()
+                    ):
+                        candidates.append(candidate)
             if not candidates:
                 raise PipelineError(
                     "input",
@@ -355,9 +435,18 @@ def validate_output_directory(
     source_roots: Iterable[Path] = (),
 ) -> None:
     output = output_dir.resolve()
+    if output.exists() and not output.is_dir():
+        raise PipelineError(
+            "output",
+            f"output path is not a directory: {output}",
+        )
     for source in inputs:
         source = source.resolve()
-        if output == source.parent or output in source.parents:
+        if (
+            output == source.parent
+            or output in source.parents
+            or source in output.parents
+        ):
             raise PipelineError(
                 "output",
                 f"output directory {output} overlaps the input source {source}; "
@@ -377,19 +466,56 @@ def validate_output_directory(
             )
 
 
-# Remove only known AutoDeduct artifacts so a failed stage cannot reuse a previous run.
-def prepare_output_directory(output_dir: Path) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    for name in GENERATED_OUTPUT_NAMES:
-        artifact = output_dir / name
-        if artifact.is_symlink() or artifact.is_file():
-            artifact.unlink()
-        elif artifact.exists():
+# Remove an old success report after the requested output location has been
+# proven separate from the requested inputs. Other artifacts are cleaned only
+# after full source validation.
+def invalidate_stale_report(output_dir: Path) -> None:
+    output = output_dir.resolve()
+    if not output.exists():
+        return
+    if not output.is_dir():
+        raise PipelineError("output", f"output path is not a directory: {output}")
+    report = output / "report.json"
+    if report.is_symlink() or report.is_file():
+        try:
+            report.unlink()
+        except OSError as error:
             raise PipelineError(
                 "output",
-                f"generated artifact path is not a regular file: {artifact}; "
-                "choose another output directory",
-            )
+                f"could not invalidate stale report {report}: {error}",
+            ) from error
+    elif report.exists():
+        raise PipelineError(
+            "output",
+            f"generated report path is not a regular file: {report}; "
+            "choose another output directory",
+        )
+
+
+# Remove only known AutoDeduct artifacts so a failed stage cannot reuse a previous run.
+def prepare_output_directory(output_dir: Path) -> None:
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        artifacts = [output_dir / name for name in GENERATED_OUTPUT_NAMES]
+        for artifact in artifacts:
+            if artifact.exists() and not (
+                artifact.is_symlink() or artifact.is_file()
+            ):
+                raise PipelineError(
+                    "output",
+                    f"generated artifact path is not a regular file: {artifact}; "
+                    "choose another output directory",
+                )
+        for artifact in artifacts:
+            if artifact.is_symlink() or artifact.is_file():
+                artifact.unlink()
+    except PipelineError:
+        raise
+    except OSError as error:
+        raise PipelineError(
+            "output",
+            f"could not prepare output directory {output_dir}: {error}",
+        ) from error
 
 
 # Convert the typed pipeline result into JSON-serializable data for automation.
@@ -458,14 +584,21 @@ def missing_contract_names(path: Path) -> list[str]:
         )
 
     names: list[str] = []
+    seen: set[str] = set()
     for item in items:
         if isinstance(item, str) and item.strip():
-            names.append(item)
+            name = item.strip()
+            if name not in seen:
+                names.append(name)
+                seen.add(name)
             continue
         if isinstance(item, dict):
             name = item.get("function") or item.get("name")
             if isinstance(name, str) and name.strip():
-                names.append(name)
+                name = name.strip()
+                if name not in seen:
+                    names.append(name)
+                    seen.add(name)
                 continue
         raise PipelineError(
             "contract-check",
@@ -480,15 +613,63 @@ def missing_contract_names(path: Path) -> list[str]:
 def tricera_diagnostic(stage: StageResult) -> str | None:
     """Detect the fallback that Saida otherwise reports only as a warning."""
 
-    if not stage.stderr_file:
+    log_files = [path for path in (stage.stderr_file, stage.stdout_file) if path]
+    if not log_files:
         return None
-    text = Path(stage.stderr_file).read_text(encoding="utf-8", errors="replace")
+    try:
+        text = "\n".join(
+            Path(path).read_text(encoding="utf-8", errors="replace")
+            for path in log_files
+        ).casefold()
+    except OSError as error:
+        return f"could not inspect Saida/TriCera logs: {error}"
     markers = (
         "rosetta error:",
-        "TriCera preprocessor (tri-pp) returned an empty file",
+        "tricera preprocessor (tri-pp) returned an empty file",
     )
     if any(marker in text for marker in markers):
         return "TriCera preprocessing failed; Saida reported a fallback"
+    return None
+
+
+# Surface Saida's explicit partial-frame warning while still allowing the
+# mandatory downstream WP stage to establish the complete result.
+def saida_partial_diagnostic(stage: StageResult) -> str | None:
+    log_files = [path for path in (stage.stderr_file, stage.stdout_file) if path]
+    try:
+        text = "\n".join(
+            Path(path).read_text(encoding="utf-8", errors="replace")
+            for path in log_files
+        ).casefold()
+    except OSError as error:
+        return f"could not inspect Saida logs: {error}"
+    if "saida-w001" in text:
+        return (
+            "Saida preserved a function-level assigns clause without checking "
+            "its frame condition; the final WP stage must prove it"
+        )
+    return None
+
+
+# ISP documents every ISP-Wxxx diagnostic as evidence that its generated
+# auxiliary specification may be incomplete. Do not pass that output to WP as
+# if it represented the complete contract.
+def isp_partial_diagnostic(stage: StageResult) -> str | None:
+    log_files = [path for path in (stage.stderr_file, stage.stdout_file) if path]
+    try:
+        text = "\n".join(
+            Path(path).read_text(encoding="utf-8", errors="replace")
+            for path in log_files
+        )
+    except OSError as error:
+        return f"could not inspect ISP logs: {error}"
+    codes = sorted(set(re.findall(r"\bISP-W\d{3}\b", text, re.IGNORECASE)))
+    if codes:
+        return (
+            "ISP reported partial auxiliary inference ("
+            + ", ".join(code.upper() for code in codes)
+            + "); review the input and generated annotations"
+        )
     return None
 
 
@@ -498,11 +679,18 @@ def wp_diagnostic(stage: StageResult) -> str | None:
 
     if not stage.stdout_file:
         return "WP did not produce a stdout log"
-    text = Path(stage.stdout_file).read_text(encoding="utf-8", errors="replace")
-    match = re.search(r"Proved goals:\s*(\d+)\s*/\s*(\d+)", text)
-    if not match:
+    try:
+        text = Path(stage.stdout_file).read_text(
+            encoding="utf-8", errors="replace"
+        )
+    except OSError as error:
+        return f"could not inspect WP output: {error}"
+    matches = re.findall(r"Proved goals:\s*(\d+)\s*/\s*(\d+)", text)
+    if not matches:
         return "WP did not produce a proved-goals summary"
-    proved, total = (int(value) for value in match.groups())
+    proved, total = (int(value) for value in matches[-1])
+    if total == 0:
+        return "WP generated no proof goals"
     if proved != total:
         unresolved = re.findall(
             r"\[(?P<status>Timeout|Unknown|Failed|Invalid)\]\s+(?P<goal>[^\n]+)",
@@ -537,13 +725,31 @@ def print_human_report(report: PipelineReport) -> None:
 
 # Run the Saida/TriCera, ISP/Eva, contract-check, and WP stages in V1 order.
 def run_pipeline(args: argparse.Namespace) -> PipelineReport:
-    inputs = source_paths(args.sources)
+    validate_forwarded_options(args)
     output_dir = Path(args.output_dir).expanduser().resolve()
+    requested_files = []
     input_roots = []
     for value in args.sources:
         source = Path(value).expanduser().resolve()
         if source.is_dir():
             input_roots.append(source)
+        elif source.is_file() or source.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES:
+            requested_files.append(source)
+        else:
+            # A missing path without a supported source suffix is most likely
+            # an intended project directory. Treat it conservatively as a
+            # source root before invalidating any stale report.
+            input_roots.append(source)
+    validate_output_directory(requested_files, output_dir, input_roots)
+    invalidate_stale_report(output_dir)
+    inputs = source_paths(args.sources)
+    if len(inputs) != 1:
+        raise PipelineError(
+            "input",
+            "AutoDeduct V1 supports exactly one C translation unit because "
+            "Saida source merging is not yet file-aware; provide one .c file "
+            "and its headers",
+        )
     validate_output_directory(inputs, output_dir, input_roots)
     prepare_output_directory(output_dir)
     report = PipelineReport(
@@ -602,7 +808,12 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     if tri_warning:
         saida.status = "failed"
         saida.error = tri_warning
-    if saida.status != "passed" or not inferred.is_file():
+    elif saida.status == "passed":
+        partial_warning = saida_partial_diagnostic(saida)
+        if partial_warning:
+            saida.status = "warning"
+            saida.error = partial_warning
+    if saida.status not in {"passed", "warning"} or not inferred.is_file():
         message = saida.error or f"Saida did not produce {SAIDA_OUTPUT}"
         report.errors.append({"stage": saida.name, "message": message})
         return report
@@ -630,6 +841,11 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     )
     report.stages.append(isp)
     verified_source = output_dir / ISP_OUTPUT
+    if isp.status == "passed":
+        partial_warning = isp_partial_diagnostic(isp)
+        if partial_warning:
+            isp.status = "failed"
+            isp.error = partial_warning
     if isp.status != "passed" or not verified_source.is_file():
         message = isp.error or f"ISP did not produce {ISP_OUTPUT}"
         report.errors.append({"stage": isp.name, "message": message})

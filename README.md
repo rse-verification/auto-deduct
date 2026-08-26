@@ -123,6 +123,10 @@ commit is also stored in `REVISION` inside each component checkout under
 with refs that exist in the relevant upstream repository; this repository does
 not hard-code unapproved component-fix refs.
 
+For reproducible release images, use immutable commit hashes. Docker may reuse
+a cached checkout when the same mutable branch name is rebuilt after that
+branch moves. Add `--no-cache` when deliberately retesting a moving branch.
+
 The image contains configured versions of Frama-C, Saida, ISP, and TriCera.
 The image also contains the SMT solvers used by WP. The image is optional: the
 same `bin/autodeduct` command can run on a host where the matching tools and
@@ -156,7 +160,7 @@ Run the public ASE 2024 example directly on the host:
 ```shell
 autodeduct \
   --entry-point main \
-  --output-dir examples/ase-2024/autodeduct-output-local \
+  --output-dir autodeduct-output-ase-2024-local \
   examples/ase-2024
 ```
 
@@ -166,7 +170,7 @@ Alternatively, invoke the checkout-local executable directly without adding
 ```shell
 ./bin/autodeduct \
   --entry-point main \
-  --output-dir examples/ase-2024/autodeduct-output-local \
+  --output-dir autodeduct-output-ase-2024-local \
   examples/ase-2024
 ```
 
@@ -216,9 +220,11 @@ The intermediate files are written to `autodeduct-output-manual/`:
 * `out.c` is ISP's auxiliary-annotation output.
 * `missing-helper-contracts.json` is ISP's reachable-contract report.
 
-For projects with multiple C files, replace `stee.c` with the required source
-file list in each command. Use additional `-cpp-extra-args=-I/path/to/include`
-arguments for header directories.
+V1 Saida inference accepts exactly one C translation unit. Use additional
+`-cpp-extra-args=-I/path/to/include` arguments for its header directories.
+Projects requiring multiple `.c` inputs must first be represented as one
+analysis translation unit; AutoDeduct rejects them instead of silently
+processing only the first file.
 
 ## Run the CLI in Docker
 
@@ -235,8 +241,8 @@ and `--json` for machine-readable reporting. The V1 pipeline accepts one C
 translation unit plus its headers.
 
 For a project directory, AutoDeduct recursively discovers `.c` translation
-units. Header files are not passed as source inputs; provide additional header
-directories with `--include`:
+units and requires exactly one. Header files are not passed as source inputs;
+provide additional header directories with `--include`:
 
 ```shell
 docker run --rm \
@@ -250,12 +256,13 @@ docker run --rm \
   /work/my-project
 ```
 
-The command accepts C source files and project directories. Directory inputs
-are searched recursively for `.c` files; common build, VCS, dependency, and
-generated-output directories are skipped. Pass `--include` for header
-directories that are not next to the source files. The output directory must
-be outside the input source tree, so generated artifacts cannot overwrite the
-project being analysed.
+The command accepts one C source file or a project directory containing one C
+translation unit. Directory inputs are searched recursively for `.c` files;
+common build, VCS,
+dependency, and generated-output directories are skipped. Pass `--include` for
+header directories that are not next to the source files. The output directory
+must be outside the input source tree, so generated artifacts cannot overwrite
+the project being analysed.
 Preprocessor/compiler flags can be passed with repeated
 `--frama-c-option`, for example:
 
@@ -263,7 +270,7 @@ Preprocessor/compiler flags can be passed with repeated
 autodeduct \
   --frama-c-option=-cpp-extra-args=-DPLATFORM_TEST \
   --include include \
-  src/main.c src/account.c
+  src/main.c
 ```
 
 ## CLI options
@@ -279,7 +286,42 @@ Useful options are `--entry-point`, `--output-dir`, `--include`,
 The output directory contains `inferred.c`, `out.c`,
 `missing-helper-contracts.json`, stage logs, and `report.json`.
 
-## Result and Failure Handling
+* `--entry-point NAME` selects the contracted entry function; default is
+  `main`.
+* `--output-dir DIRECTORY` stores generated files and logs; default is
+  `autodeduct-output`.
+* `--include DIRECTORY` adds a C include directory and can be repeated.
+* `--frama-c-option OPTION` forwards an option to the Frama-C stages and can
+  be repeated.
+* `--wp-option OPTION` forwards an option only to WP and can be repeated.
+* `--wp-rte` adds WP runtime-error goals.
+* `--timeout SECONDS` limits each external analysis stage; default is 300. The
+  value must be finite and greater than zero.
+* `--json` prints the final machine-readable report to standard output.
+
+Forwarded options cannot replace the pipeline-owned entry point or activate,
+disable, or reconfigure the Saida, ISP, and WP stages. Use AutoDeduct's
+dedicated CLI options for those controls.
+
+The output directory contains `inferred.c` from Saida, `out.c` from ISP,
+`contracts.json` (AutoDeduct's normalized summary),
+`missing-helper-contracts.json` from ISP, one stdout and stderr log per stage,
+and `report.json`. The ISP missing-helper report is required; if ISP does not
+write valid JSON with a supported missing-contract field, the pipeline fails
+at `contract-check` with an actionable error.
+
+Once the requested output path is known to be separate from the input, an old
+`report.json` is invalidated before source validation. This prevents a failed
+invocation from leaving a previous `passed` report for automation to consume.
+AutoDeduct also treats a WP run with no proof goals as a failure rather than a
+successful verification.
+
+If the requested output overlaps an input tree, AutoDeduct deliberately leaves
+that location untouched and reports the validation failure on the console (or
+standard output with `--json`). This preserves the stronger rule that source
+trees are never cleaned or rewritten by the runner.
+
+## Result and failure handling
 
 The CLI returns exit code `0` only when parsing, functional inference,
 auxiliary annotation inference, reachable-contract checking, and WP all pass.
@@ -287,7 +329,7 @@ It returns exit code `1` for input, environment, timeout, parsing, inference,
 annotation, contract, or WP failures. `--json` writes the same stage status,
 command, logs, artifacts, and error information in machine-readable form.
 
-## Repository Layout
+## Repository layout
 
 - `bin/autodeduct`: executable CLI entry point.
 - `bin/autodeduct_pipeline.py`: stage execution, ISP report handling, and
@@ -314,8 +356,10 @@ considers reachable from the entry point.
 Input diagnostics are reported before analysis when a source path does not
 exist, is not a regular file or directory, or is an explicit source file with
 an unsupported suffix. Directory inputs must contain at least one discoverable
-`.c` translation unit; header files should be supplied through
-`--include` rather than as source inputs. If Frama-C reports that the selected
+`.c` translation unit, and V1 requires the resolved input to contain
+exactly one translation unit because Saida's source merge is not file-aware.
+Header files should be supplied through `--include` rather than as source
+inputs. If Frama-C reports that the selected
 entry point is not defined,
 AutoDeduct identifies the missing function and suggests checking
 `--entry-point`. If a source calls a function without a visible forward
@@ -326,6 +370,63 @@ from being mistaken for current output while preserving unrelated files.
 When WP leaves goals unresolved, the failure reports the proved/total count
 and includes the unresolved goal status and name when WP prints them.
 
+## V1 scope and limitations
+
+V1 is a deterministic CLI pipeline. It does not modify source files or
+automatically accept generated contracts into the original project.
+
+The underlying Saida and ISP plugins are experimental and retain their own
+limitations. In particular, the current toolchain should not be treated as a
+general solution for floating-point programs, unsupported pointer/array
+patterns (including pointer arithmetic and nested pointer stores), persistent
+local static state, or loops without suitable invariants. The V1 pipeline
+accepts one C translation unit plus its headers; multiple `.c` inputs fail
+before tool execution. Saida accepts the
+documented C-expression subset of `requires`, `ensures`, and supported
+behavior guards; general ACSL logic functions and predicates are outside this
+inference subset. Behavior-specific `assigns`, `complete`, and `disjoint`
+clauses are rejected rather than silently omitted.
+Saida preserves function-level `assigns` clauses but its inference harness
+does not itself prove their frame conditions; `SAIDA-W001` identifies that
+partial check, and AutoDeduct relies on the final WP stage before reporting a
+successful complete-contract result.
+
+If ISP emits any `ISP-Wxxx` warning, AutoDeduct stops before WP because ISP
+documents these warnings as evidence that the generated auxiliary
+specification may be incomplete.
+
+ISP does not currently support recursive auxiliary annotation generation for
+arrays contained in struct fields, such as repeated paths of the form
+`records[slot].f1[i].f2[j]`. The merged enum-indexed struct support covers
+flat struct fields after an enum-indexed array access, not arbitrary nested
+`Field -> Index` paths. ISP also rejects an array index that Eva cannot bound
+to integer values, or whose concrete expansion would exceed 1024 values,
+rather than risking a crash or an impractically large generated contract.
+
+For this unsupported nested-aggregate pattern, ISP reports diagnostic
+`ISP-E010` and the AutoDeduct `isp_eva` stage fails clearly. This means the
+pipeline result is not complete or valid for WP; review the input and
+contract manually rather than treating generated output as a proof. AutoDeduct
+does not modify the original source files.
+
+Unbounded or excessively wide Eva-resolved indexes report `ISP-E011` with the
+same fail-closed pipeline behavior.
+
+A successful command is evidence for the selected input and tool versions,
+not a universal proof that every possible execution is safe.
+
+## Repository layout
+
+* `bin/autodeduct` is the small executable entry point.
+* `bin/autodeduct_pipeline.py` contains argument parsing, stage execution,
+  ISP report handling, and report generation. It deliberately does not
+  maintain a second C parser or call graph.
+* `Dockerfiles/AutoDeductDockerfile` builds the Frama-C/Saida/TriCera/ISP
+  environment and installs the CLI as `autodeduct`.
+* `examples/ase-2024/` contains the attributed public steering-system example
+  and its entry-point contract.
+* `tests/test_autodeduct.py` tests ISP report parsing and orchestration behavior
+  without requiring Docker or the analysis tools.
 
 ## License
 
