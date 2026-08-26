@@ -66,6 +66,29 @@ class AutoDeductPipelineTests(unittest.TestCase):
 
             self.assertEqual(MODULE.source_paths([temp]), [source.resolve()])
 
+    def test_explicit_non_c_input_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "header.h"
+            source.write_text("int value;\n", encoding="utf-8")
+
+            with self.assertRaises(MODULE.PipelineError) as raised:
+                MODULE.source_paths([str(source)])
+
+            self.assertEqual(raised.exception.stage, "input")
+            self.assertIn("unsupported source file type", raised.exception.message)
+
+    def test_cli_does_not_write_report_on_input_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "header.h"
+            source.write_text("int value;\n", encoding="utf-8")
+            output = Path(temp) / "results"
+
+            with patch.object(MODULE, "print_human_report"):
+                result = MODULE.main(["--output-dir", str(output), str(source)])
+
+            self.assertEqual(result, 1)
+            self.assertFalse(output.exists())
+
     def test_output_directory_cannot_be_inside_input_source_tree(self):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp) / "project"
@@ -75,13 +98,19 @@ class AutoDeductPipelineTests(unittest.TestCase):
             output = project / "results"
 
             with self.assertRaises(MODULE.PipelineError) as raised:
-                MODULE.validate_output_directory([source], output)
+                MODULE.validate_output_directory([source], output, [project])
 
             self.assertEqual(raised.exception.stage, "output")
-            self.assertIn("inside the input source tree", raised.exception.message)
+            self.assertIn("overlaps the input source tree", raised.exception.message)
 
-            with self.assertRaises(MODULE.PipelineError):
-                MODULE.validate_output_directory([source], output, [project])
+    def test_single_file_can_use_child_output_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "project"
+            project.mkdir()
+            source = project / "main.c"
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+
+            MODULE.validate_output_directory([source], project / "results")
 
     def test_cli_does_not_write_report_to_an_unsafe_output_directory(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -280,6 +309,59 @@ class AutoDeductPipelineTests(unittest.TestCase):
 
             self.assertIn("User Error: invalid option", result.error)
 
+    def test_missing_entry_point_has_actionable_parse_diagnostic(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            completed = MODULE.subprocess.CompletedProcess(
+                ["frama-c"],
+                1,
+                "",
+                "[kernel] User Error: 'paper_entry' is not a defined function. "
+                "Please choose a valid function name for option -main\n",
+            )
+            with patch.object(MODULE.subprocess, "run", return_value=completed):
+                result = MODULE.run_stage(
+                    name="parse",
+                    description="parse",
+                    command=["frama-c"],
+                    cwd=output,
+                    output_dir=output,
+                    timeout=1,
+                )
+
+            self.assertEqual(
+                result.error,
+                "entry point 'paper_entry' was not found as a function definition "
+                "in the input C sources; check --entry-point and ensure the function "
+                "is defined",
+            )
+
+    def test_missing_forward_declaration_has_actionable_parse_diagnostic(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            completed = MODULE.subprocess.CompletedProcess(
+                ["frama-c"],
+                1,
+                "",
+                "error: implicit declaration of function 'update_state'\n",
+            )
+            with patch.object(MODULE.subprocess, "run", return_value=completed):
+                result = MODULE.run_stage(
+                    name="parse",
+                    description="parse",
+                    command=["frama-c"],
+                    cwd=output,
+                    output_dir=output,
+                    timeout=1,
+                )
+
+            self.assertEqual(
+                result.error,
+                "function 'update_state' is called without a visible declaration; "
+                "add a prototype in the source or an included header before running "
+                "AutoDeduct",
+            )
+
     def test_wp_requires_all_goals_to_be_proved(self):
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp)
@@ -293,6 +375,28 @@ class AutoDeductPipelineTests(unittest.TestCase):
             )
 
             self.assertEqual(MODULE.wp_diagnostic(stage), "WP proved 3 of 4 goals")
+
+    def test_wp_diagnostic_names_unresolved_goal(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            log = output / "wp.stdout.log"
+            log.write_text(
+                "[wp] [Timeout] typed_update_global_array_ensures_2\n"
+                "[wp] Proved goals:   20 / 21\n",
+                encoding="utf-8",
+            )
+            stage = MODULE.StageResult(
+                name="wp",
+                description="wp",
+                status="passed",
+                stdout_file=str(log),
+            )
+
+            self.assertEqual(
+                MODULE.wp_diagnostic(stage),
+                "WP proved 20 of 21 goals; unresolved: "
+                "Timeout: typed_update_global_array_ensures_2",
+            )
 
     def test_tricera_fallback_is_not_a_clean_result(self):
         with tempfile.TemporaryDirectory() as temp:

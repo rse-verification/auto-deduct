@@ -162,6 +162,65 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8", errors="replace")
 
 
+# Turn recurring compiler diagnostics into stable, actionable input messages.
+def failure_diagnostic(*, returncode: int, stdout: str, stderr: str) -> str:
+    streams = [line.strip() for stream in (stderr, stdout) for line in stream.splitlines()]
+    combined = "\n".join(streams)
+
+    entry_point = re.search(
+        r"['\"](?P<name>[A-Za-z_]\w*)['\"] is not a defined function",
+        combined,
+        re.IGNORECASE,
+    )
+    if entry_point:
+        name = entry_point.group("name")
+        return (
+            f"entry point '{name}' was not found as a function definition in the "
+            "input C sources; check --entry-point and ensure the function is defined"
+        )
+
+    forward_declaration = re.search(
+        r"implicit declaration of function\s+['\"](?P<name>[A-Za-z_]\w*)['\"]",
+        combined,
+        re.IGNORECASE,
+    )
+    if forward_declaration:
+        name = forward_declaration.group("name")
+        return (
+            f"function '{name}' is called without a visible declaration; add a "
+            "prototype in the source or an included header before running AutoDeduct"
+        )
+
+    missing_header = re.search(
+        r"(?:fatal error|error):\s*['\"]?(?P<header>[^'\"\s:]+\.h)['\"]?\s*: "
+        r"No such file or directory",
+        combined,
+        re.IGNORECASE,
+    )
+    if missing_header:
+        header = missing_header.group("header")
+        return (
+            f"required header '{header}' was not found; add its directory with "
+            "--include"
+        )
+
+    if re.search(r"unterminated (?:comment|string literal)", combined, re.IGNORECASE):
+        return (
+            "input contains an unterminated C or ACSL comment/string; check the "
+            "source delimiters"
+        )
+
+    diagnostic = next(
+        (
+            line
+            for line in streams
+            if re.search(r"fatal error|user error|error:|aborted", line, re.IGNORECASE)
+        ),
+        streams[-1] if streams else "no diagnostic was written by the command",
+    )
+    return f"command exited with status {returncode}: {diagnostic}"
+
+
 # Execute one external analysis stage and capture its logs, timing, artifacts, and failures.
 def run_stage(
     *,
@@ -217,21 +276,11 @@ def run_stage(
         result.returncode = completed.returncode
         result.status = "passed" if completed.returncode == 0 else "failed"
         if completed.returncode != 0:
-            lines = [
-                line.strip()
-                for stream in (completed.stderr, completed.stdout)
-                for line in stream.splitlines()
-                if line.strip()
-            ]
-            diagnostic = next(
-                (
-                    line
-                    for line in lines
-                    if re.search(r"fatal error|user error|error:|aborted", line, re.IGNORECASE)
-                ),
-                lines[-1] if lines else "no diagnostic was written by the command",
+            result.error = failure_diagnostic(
+                returncode=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
             )
-            result.error = f"command exited with status {completed.returncode}: {diagnostic}"
         result.stdout_file = str(output_dir / f"{name}.stdout.log")
         result.stderr_file = str(output_dir / f"{name}.stderr.log")
     result.duration_seconds = time.monotonic() - started
@@ -265,6 +314,12 @@ def source_paths(values: Iterable[str]) -> list[Path]:
     for value in values:
         path = Path(value).expanduser().resolve()
         if path.is_file():
+            if path.suffix.lower() not in SUPPORTED_SOURCE_SUFFIXES:
+                raise PipelineError(
+                    "input",
+                    f"unsupported source file type: {value}; provide a .c file "
+                    "or a directory containing C source files",
+                )
             candidates = [path]
         elif path.is_dir():
             candidates = [
@@ -300,13 +355,24 @@ def validate_output_directory(
     source_roots: Iterable[Path] = (),
 ) -> None:
     output = output_dir.resolve()
-    roots = {path.resolve().parent for path in inputs}
-    roots.update(path.resolve() for path in source_roots)
-    for source_root in roots:
-        if output == source_root or source_root in output.parents:
+    for source in inputs:
+        source = source.resolve()
+        if output == source.parent or output in source.parents:
             raise PipelineError(
                 "output",
-                f"output directory {output} is inside the input source tree "
+                f"output directory {output} overlaps the input source {source}; "
+                "choose a separate output directory",
+            )
+    for source_root in source_roots:
+        source_root = source_root.resolve()
+        if (
+            output == source_root
+            or source_root in output.parents
+            or output in source_root.parents
+        ):
+            raise PipelineError(
+                "output",
+                f"output directory {output} overlaps the input source tree "
                 f"{source_root}; choose a separate output directory",
             )
 
@@ -438,6 +504,16 @@ def wp_diagnostic(stage: StageResult) -> str | None:
         return "WP did not produce a proved-goals summary"
     proved, total = (int(value) for value in match.groups())
     if proved != total:
+        unresolved = re.findall(
+            r"\[(?P<status>Timeout|Unknown|Failed|Invalid)\]\s+(?P<goal>[^\n]+)",
+            text,
+            re.IGNORECASE,
+        )
+        if unresolved:
+            details = "; ".join(
+                f"{status}: {goal.strip()}" for status, goal in unresolved
+            )
+            return f"WP proved {proved} of {total} goals; unresolved: {details}"
         return f"WP proved {proved} of {total} goals"
     return None
 
@@ -466,7 +542,8 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     input_roots = []
     for value in args.sources:
         source = Path(value).expanduser().resolve()
-        input_roots.append(source if source.is_dir() else source.parent)
+        if source.is_dir():
+            input_roots.append(source)
     validate_output_directory(inputs, output_dir, input_roots)
     prepare_output_directory(output_dir)
     report = PipelineReport(
@@ -643,7 +720,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     try:
-        if not any(error["stage"] == "output" for error in report.errors):
+        if not any(error["stage"] in {"input", "output"} for error in report.errors):
             persist_report(report)
     except OSError as error:
         report.errors.append({"stage": "report", "message": str(error)})

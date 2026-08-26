@@ -311,6 +311,8 @@ declaration, the parse error explains that a prototype must be added in the
 source or an included header. AutoDeduct removes only its known generated files
 and stage logs at the start of a run, preventing artifacts from an earlier run
 from being mistaken for current output while preserving unrelated files.
+When WP leaves goals unresolved, the failure reports the proved/total count
+and includes the unresolved goal status and name when WP prints them.
 
 
 ## License
