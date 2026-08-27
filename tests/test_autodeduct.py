@@ -849,6 +849,223 @@ class AutoDeductPipelineTests(unittest.TestCase):
 
             self.assertIn("fallback", MODULE.tricera_diagnostic(stage))
 
+    def test_tricera_syntax_error_hidden_by_success_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "saida.stdout.log"
+            log.write_text(
+                "[saida] Warning: [TriCera] Syntax Error: unsupported term\n",
+                encoding="utf-8",
+            )
+            stage = MODULE.StageResult(
+                name="saida_tricera",
+                description="saida",
+                status="passed",
+                stdout_file=str(log),
+            )
+
+            diagnostic = MODULE.tricera_diagnostic(stage)
+
+            self.assertIn("syntax error", diagnostic)
+            self.assertIn("no sound functional contract", diagnostic)
+
+    def test_tricera_not_solvable_hidden_by_success_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "saida.stderr.log"
+            log.write_text(
+                "java.lang.RuntimeException: Not solvable\n",
+                encoding="utf-8",
+            )
+            stage = MODULE.StageResult(
+                name="saida_tricera",
+                description="saida",
+                status="passed",
+                stderr_file=str(log),
+            )
+
+            diagnostic = MODULE.tricera_diagnostic(stage)
+
+            self.assertIn("not solvable", diagnostic)
+            self.assertIn("manually", diagnostic)
+
+    def test_tricera_unsupported_type_fallbacks_are_rejected(self):
+        for type_name in ("float", "double", "long double"):
+            with self.subTest(type_name=type_name), tempfile.TemporaryDirectory() as temp:
+                log = Path(temp) / "saida.stderr.log"
+                log.write_text(
+                    "[saida] Warning: [TriCera] "
+                    f"type {type_name} not supported, assuming int\n",
+                    encoding="utf-8",
+                )
+                stage = MODULE.StageResult(
+                    name="saida_tricera",
+                    description="saida",
+                    status="passed",
+                    stderr_file=str(log),
+                )
+
+                diagnostic = MODULE.tricera_diagnostic(stage)
+
+                self.assertIn(type_name, diagnostic)
+                self.assertIn("fallback type approximation", diagnostic)
+
+    def test_pipeline_stops_on_hidden_tricera_double_fallback(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "example.c"
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            output = root / "results"
+            args = MODULE.parser().parse_args(
+                ["--output-dir", str(output), str(source)]
+            )
+            commands = []
+
+            def fake_run(command, cwd, **_kwargs):
+                commands.append(command)
+                if "-saida" in command:
+                    (Path(cwd) / MODULE.SAIDA_OUTPUT).write_text(
+                        source.read_text(encoding="utf-8"), encoding="utf-8"
+                    )
+                    return MODULE.subprocess.CompletedProcess(
+                        command,
+                        0,
+                        "[saida] Warning: [TriCera] "
+                        "type double not supported, assuming int\n",
+                        "",
+                    )
+                return MODULE.subprocess.CompletedProcess(command, 0, "ok\n", "")
+
+            with patch.object(
+                MODULE.shutil, "which", return_value="/usr/bin/fake"
+            ), patch.object(MODULE.subprocess, "run", side_effect=fake_run):
+                report = MODULE.run_pipeline(args)
+
+            self.assertEqual(report.status, "failed")
+            self.assertEqual(
+                [stage.name for stage in report.stages],
+                ["parse", "saida_tricera"],
+            )
+            self.assertIn("double", report.errors[0]["message"])
+            self.assertFalse(any("-isp" in command for command in commands))
+
+    def test_tricera_diagnostic_phrases_in_benign_prose_are_ignored(self):
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "saida.stdout.log"
+            log.write_text(
+                "[saida] TriCera completed without a Syntax Error\n"
+                "[saida] All obligations were solvable, not Not solvable\n"
+                "[saida] Documentation: type float not supported is an example\n",
+                encoding="utf-8",
+            )
+            stage = MODULE.StageResult(
+                name="saida_tricera",
+                description="saida",
+                status="passed",
+                stdout_file=str(log),
+            )
+
+            self.assertIsNone(MODULE.tricera_diagnostic(stage))
+
+    def test_pipeline_stops_on_hidden_tricera_syntax_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "example.c"
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            output = root / "results"
+            args = MODULE.parser().parse_args(
+                ["--output-dir", str(output), str(source)]
+            )
+            commands = []
+
+            def fake_run(command, cwd, **_kwargs):
+                commands.append(command)
+                if "-saida" in command:
+                    (Path(cwd) / MODULE.SAIDA_OUTPUT).write_text(
+                        source.read_text(encoding="utf-8"), encoding="utf-8"
+                    )
+                    return MODULE.subprocess.CompletedProcess(
+                        command,
+                        0,
+                        "[saida] Warning: Syntax Error: unsupported predicate\n",
+                        "",
+                    )
+                return MODULE.subprocess.CompletedProcess(command, 0, "ok\n", "")
+
+            with patch.object(
+                MODULE.shutil, "which", return_value="/usr/bin/fake"
+            ), patch.object(MODULE.subprocess, "run", side_effect=fake_run):
+                report = MODULE.run_pipeline(args)
+
+            self.assertEqual(report.status, "failed")
+            self.assertEqual(
+                [stage.name for stage in report.stages],
+                ["parse", "saida_tricera"],
+            )
+            self.assertIn("syntax error", report.errors[0]["message"])
+            self.assertFalse(any("-isp" in command for command in commands))
+
+    def test_isp_e005_has_an_actionable_expression_boundary_diagnostic(self):
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "isp.stderr.log"
+            log.write_text(
+                "[isp] User Error: [ISP-E005] expression is not an lvalue\n",
+                encoding="utf-8",
+            )
+            stage = MODULE.StageResult(
+                name="isp_eva",
+                description="isp",
+                status="failed",
+                stderr_file=str(log),
+            )
+
+            diagnostic = MODULE.isp_limit_diagnostic(stage)
+
+            self.assertIn("unsupported lvalue, pointer, or array-index", diagnostic)
+            self.assertIn("expression is not an lvalue", diagnostic)
+            self.assertIn("WP was not run", diagnostic)
+
+    def test_pipeline_stops_before_wp_on_isp_e005_for_any_process_exit(self):
+        for returncode in (0, 1):
+            with self.subTest(returncode=returncode), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                source = root / "example.c"
+                source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+                output = root / "results"
+                args = MODULE.parser().parse_args(
+                    ["--output-dir", str(output), str(source)]
+                )
+                commands = []
+
+                def fake_run(command, cwd, **_kwargs):
+                    commands.append(command)
+                    if "-saida" in command:
+                        (Path(cwd) / MODULE.SAIDA_OUTPUT).write_text(
+                            source.read_text(encoding="utf-8"), encoding="utf-8"
+                        )
+                    if "-isp" in command:
+                        (Path(cwd) / MODULE.ISP_OUTPUT).write_text(
+                            source.read_text(encoding="utf-8"), encoding="utf-8"
+                        )
+                        return MODULE.subprocess.CompletedProcess(
+                            command,
+                            returncode,
+                            "",
+                            "[isp] User Error: [ISP-E005] unsupported expression\n",
+                        )
+                    return MODULE.subprocess.CompletedProcess(command, 0, "ok\n", "")
+
+                with patch.object(
+                    MODULE.shutil, "which", return_value="/usr/bin/fake"
+                ), patch.object(MODULE.subprocess, "run", side_effect=fake_run):
+                    report = MODULE.run_pipeline(args)
+
+                self.assertEqual(report.status, "failed")
+                self.assertEqual(
+                    [stage.name for stage in report.stages],
+                    ["parse", "saida_tricera", "isp_eva"],
+                )
+                self.assertIn("ISP-E005", report.errors[0]["message"])
+                self.assertFalse(any("-wp" in command for command in commands))
+
     def test_saida_partial_assigns_warning_is_surfaced(self):
         with tempfile.TemporaryDirectory() as temp:
             log = Path(temp) / "saida.stdout.log"
@@ -884,6 +1101,127 @@ class AutoDeductPipelineTests(unittest.TestCase):
 
             self.assertIn("ISP-W003", diagnostic)
             self.assertIn("ISP-W007", diagnostic)
+
+    def test_wp_names_missing_loop_annotations_when_goals_remain(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            stdout = output / "wp.stdout.log"
+            stderr = output / "wp.stderr.log"
+            stdout.write_text(
+                "[wp] [Unknown] typed_main_loop_invariant_preserved\n"
+                "[wp] Proved goals: 11 / 16\n",
+                encoding="utf-8",
+            )
+            stderr.write_text(
+                "[wp] warning: Missing loop assigns. Default assigns everything\n",
+                encoding="utf-8",
+            )
+            stage = MODULE.StageResult(
+                name="wp",
+                description="wp",
+                status="passed",
+                stdout_file=str(stdout),
+                stderr_file=str(stderr),
+            )
+
+            diagnostic = MODULE.wp_diagnostic(stage)
+
+            self.assertIn("WP proved 11 of 16 goals", diagnostic)
+            self.assertIn("does not infer loop invariants", diagnostic)
+            self.assertIn("loop assigns", diagnostic)
+
+    def test_unresolved_loop_goal_is_classified_without_a_warning_line(self):
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "wp.stdout.log"
+            log.write_text(
+                "[wp] [Unknown] typed_main_loop_invariant_preserved\n"
+                "[wp] Proved goals: 11 / 16\n",
+                encoding="utf-8",
+            )
+            stage = MODULE.StageResult(
+                name="wp",
+                description="wp",
+                status="passed",
+                stdout_file=str(log),
+            )
+
+            self.assertIn("loop proof obligations", MODULE.wp_diagnostic(stage))
+
+    def test_successful_loop_goal_does_not_relabel_an_unrelated_wp_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "wp.stdout.log"
+            log.write_text(
+                "[wp] [Qed] typed_main_loop_invariant_established\n"
+                "[wp] [Unknown] typed_main_ensures_result\n"
+                "[wp] Proved goals: 4 / 5\n",
+                encoding="utf-8",
+            )
+            stage = MODULE.StageResult(
+                name="wp",
+                description="wp",
+                status="passed",
+                stdout_file=str(log),
+            )
+
+            diagnostic = MODULE.wp_diagnostic(stage)
+
+            self.assertEqual(
+                diagnostic,
+                "WP proved 4 of 5 goals; unresolved: "
+                "Unknown: typed_main_ensures_result",
+            )
+
+    def test_benign_loop_summary_does_not_relabel_a_wp_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "wp.stdout.log"
+            log.write_text(
+                "[wp] Summary: no missing loop invariant diagnostics\n"
+                "[wp] [Unknown] typed_main_ensures_result\n"
+                "[wp] Proved goals: 4 / 5\n",
+                encoding="utf-8",
+            )
+            stage = MODULE.StageResult(
+                name="wp",
+                description="wp",
+                status="passed",
+                stdout_file=str(log),
+            )
+
+            self.assertNotIn("loop proof obligations", MODULE.wp_diagnostic(stage))
+
+    def test_generic_helper_loop_log_remains_an_honest_wp_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            stdout = output / "wp.stdout.log"
+            stderr = output / "wp.stderr.log"
+            stdout.write_text(
+                "[wp] [Unknown] typed_helper_count_to_limit_assigns\n"
+                "[wp] [Unknown] typed_helper_count_to_limit_signed_overflow\n"
+                "[wp] [Unknown] typed_helper_count_to_limit_ensures\n"
+                "[wp] [Unknown] typed_helper_count_to_limit_terminates\n"
+                "[wp] Proved goals: 11 / 16\n",
+                encoding="utf-8",
+            )
+            stderr.write_text(
+                "[wp] warning: Missing assigns clause; assigns everything\n",
+                encoding="utf-8",
+            )
+            stage = MODULE.StageResult(
+                name="wp",
+                description="wp",
+                status="passed",
+                stdout_file=str(stdout),
+                stderr_file=str(stderr),
+            )
+
+            diagnostic = MODULE.wp_diagnostic(stage)
+
+            self.assertNotIn("loop proof obligations", diagnostic)
+            self.assertIn("WP proved 11 of 16 goals", diagnostic)
+            self.assertIn("typed_helper_count_to_limit_assigns", diagnostic)
+            self.assertIn("typed_helper_count_to_limit_signed_overflow", diagnostic)
+            self.assertIn("typed_helper_count_to_limit_ensures", diagnostic)
+            self.assertIn("typed_helper_count_to_limit_terminates", diagnostic)
 
 
 if __name__ == "__main__":

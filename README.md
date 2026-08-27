@@ -375,13 +375,58 @@ and includes the unresolved goal status and name when WP prints them.
 V1 is a deterministic CLI pipeline. It does not modify source files or
 automatically accept generated contracts into the original project.
 
-The underlying Saida and ISP plugins are experimental and retain their own
-limitations. In particular, the current toolchain should not be treated as a
-general solution for floating-point programs, unsupported pointer/array
-patterns (including pointer arithmetic and nested pointer stores), persistent
-local static state, or loops without suitable invariants. The V1 pipeline
-accepts one C translation unit plus its headers; multiple `.c` inputs fail
-before tool execution. Saida accepts the
+### Diagnostic policy
+
+The underlying Saida, TriCera, and ISP plugins are experimental and retain
+their own limitations. AutoDeduct classifies a limitation only from explicit
+stage output, native plugin diagnostic codes, and unresolved WP obligations.
+It does not search C source text with regular expressions to guess which
+language feature caused a failure. This keeps diagnostics reproducible and
+avoids claiming a source-level cause that the analysis tools did not establish.
+
+The Saida/TriCera stage fails even when its process exits with status zero if a
+diagnostic-form log line reports `Syntax Error`, `Not solvable`, or that a type
+is not supported. A diagnostic-form line may have Frama-C/plugin and severity
+prefixes, but the diagnostic phrase must begin the remaining line; incidental
+prose containing the same words is ignored. AutoDeduct does not accept
+TriCera's integer fallback for `float`, `double`, `long double`, or any other
+unsupported type as verification of the source semantics.
+
+ISP diagnostic `ISP-E005` is reported as an unsupported lvalue, pointer, or
+array-index boundary and stops the pipeline before WP. AutoDeduct includes the
+native ISP detail because the same code covers several expression shapes,
+including pointer arithmetic, nested pointer dereferences, and non-lvalue
+indexes. All `ISP-Wxxx` diagnostics also stop the pipeline before WP because
+ISP documents them as evidence of partial auxiliary inference.
+
+When WP leaves explicit loop-invariant, loop-assigns, or loop-variant goals
+unresolved, or reports a missing loop annotation, AutoDeduct names the loop
+boundary in its final message. It still reports the proved/total goal count.
+A completed process with unresolved WP goals remains a failed AutoDeduct run.
+Some loop cases produce only generic evidence such as `Missing assigns clause`
+and function-level `_assigns`, `_signed_overflow`, `_ensures`, or `_terminates`
+goals. Those signals also occur in non-loop verification failures, so
+AutoDeduct deliberately keeps the WP message generic rather than guessing that
+the loop is the cause. Inspect the WP log and add suitable loop annotations
+when the source contains a loop.
+
+### Known hard boundaries and workarounds
+
+| Boundary | V1 behavior | Recommended workaround |
+| --- | --- | --- |
+| Floating point | Fails at `saida_tricera` when TriCera reports an unsupported floating-point type; V1 never accepts the integer fallback as verification. | Use a reviewed fixed-point model or verify floating-point semantics with a toolchain that models the required IEEE behavior. |
+| Pointer arithmetic and unsupported lvalue/index expressions | `ISP-E005` preserves the native detail in an actionable `isp_eva` failure and WP is not run. | Simplify the access pattern or provide and review the required validity, separation, frame, and value-relation ACSL manually. |
+| Nested pointers | May fail as `ISP-E005`, a Saida/TriCera diagnostic, a missing contract, or unresolved WP goals. V1 does not infer the required multi-level validity and aliasing model. | Flatten the interface where appropriate, or write explicit contracts for every dereference level and review aliasing assumptions. |
+| Persistent local static state | There is no stable component diagnostic that identifies every case. AutoDeduct fails if WP is incomplete, but it does not infer persistence semantics or guess this cause from source text. | Model the persistent state explicitly and give the function an accurate frame and state-transition contract. Do not use `assigns \nothing` for a function that changes static state. |
+| Loops | Unresolved or missing loop annotations produce a specific WP failure when WP identifies them. General loop-invariant inference is outside V1. | Add and review `loop invariant` and `loop assigns` clauses, plus `loop variant` when termination must be proved. |
+
+The absence of one of these specific messages does not mean the corresponding
+feature is supported. Some component versions emit only a generic syntax,
+inference, missing-contract, or WP failure. Always retain and inspect the stage
+logs named in `report.json` when qualifying a new input pattern.
+
+The V1 pipeline accepts one C translation unit plus its headers; multiple `.c`
+inputs fail before tool execution. Saida accepts the
 documented C-expression subset of `requires`, `ensures`, and supported
 behavior guards; general ACSL logic functions and predicates are outside this
 inference subset. Behavior-specific `assigns`, `complete`, and `disjoint`
@@ -390,10 +435,6 @@ Saida preserves function-level `assigns` clauses but its inference harness
 does not itself prove their frame conditions; `SAIDA-W001` identifies that
 partial check, and AutoDeduct relies on the final WP stage before reporting a
 successful complete-contract result.
-
-If ISP emits any `ISP-Wxxx` warning, AutoDeduct stops before WP because ISP
-documents these warnings as evidence that the generated auxiliary
-specification may be incomplete.
 
 ISP does not currently support recursive auxiliary annotation generation for
 arrays contained in struct fields, such as repeated paths of the form
