@@ -67,7 +67,10 @@ Build from the repository root:
 ```shell
 git clone https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
-docker build -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
+docker build \
+  -t auto-deduct:1.0.0 \
+  -t auto-deduct:latest \
+  -f Dockerfiles/AutoDeductDockerfile .
 ```
 
 On Apple Silicon, build and run the image as `linux/amd64` so the TriCera
