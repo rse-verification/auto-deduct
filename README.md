@@ -326,11 +326,13 @@ trees are never cleaned or rewritten by the runner.
 
 ## Result and failure handling
 
-The CLI returns exit code `0` only when parsing, functional inference,
-auxiliary annotation inference, reachable-contract checking, and WP all pass.
-It returns exit code `1` for input, environment, timeout, parsing, inference,
-annotation, contract, or WP failures. `--json` writes the same stage status,
-command, logs, artifacts, and error information in machine-readable form.
+The CLI returns exit code `0` when parsing, inference, auxiliary annotation,
+reachable-contract checking, and WP verification complete. A stage may still
+be reported as `WARNING`: the warning is retained in `report.json` and the
+console summary, while the remaining stages run and determine whether the
+selected program can be proved completely. It returns exit code `1` for input,
+environment, timeout, parsing, semantic-inference, annotation, contract, or
+WP failures.
 
 ## Repository layout
 
@@ -387,20 +389,24 @@ It does not search C source text with regular expressions to guess which
 language feature caused a failure. This keeps diagnostics reproducible and
 avoids claiming a source-level cause that the analysis tools did not establish.
 
-The Saida/TriCera stage fails even when its process exits with status zero if a
-diagnostic-form log line reports `Syntax Error`, `Not solvable`, or that a type
-is not supported. A diagnostic-form line may have Frama-C/plugin and severity
-prefixes, but the diagnostic phrase must begin the remaining line; incidental
-prose containing the same words is ignored. AutoDeduct does not accept
-TriCera's integer fallback for `float`, `double`, `long double`, or any other
-unsupported type as verification of the source semantics.
+The Saida/TriCera stage still fails even when its process exits with status
+zero if a diagnostic-form log line reports `Syntax Error`, `Not solvable`, or
+that a type is not supported. A diagnostic-form line may have Frama-C/plugin
+and severity prefixes, but the diagnostic phrase must begin the remaining
+line; incidental prose containing the same words is ignored. AutoDeduct does
+not accept TriCera's integer fallback for `float`, `double`, `long double`, or
+any other unsupported type as verification of the source semantics. A TriCera
+preprocessing-fallback message is instead retained as a warning when Saida
+writes `inferred.c`; ISP, contract checking, and WP then decide the result.
 
 ISP diagnostic `ISP-E005` is reported as an unsupported lvalue, pointer, or
 array-index boundary and stops the pipeline before WP. AutoDeduct includes the
 native ISP detail because the same code covers several expression shapes,
 including pointer arithmetic, nested pointer dereferences, and non-lvalue
-indexes. All `ISP-Wxxx` diagnostics also stop the pipeline before WP because
-ISP documents them as evidence of partial auxiliary inference.
+indexes. `ISP-Wxxx` diagnostics are retained as stage warnings, but do not
+block WP: an omission of an auxiliary annotation can make proof harder, while
+the final complete WP result and reachable-contract check remain the acceptance
+criteria.
 
 When WP leaves explicit loop-invariant, loop-assigns, or loop-variant goals
 unresolved, or reports a missing loop annotation, AutoDeduct names the loop

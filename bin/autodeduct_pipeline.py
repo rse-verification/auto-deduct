@@ -645,7 +645,7 @@ def diagnostic_payload(line: str) -> str:
     return payload.casefold()
 
 
-# Detect TriCera fallback warnings that Saida may otherwise hide behind a successful exit code.
+# Detect TriCera backend errors that Saida may otherwise hide behind a successful exit code.
 def tricera_diagnostic(stage: StageResult) -> str | None:
     """Reject explicit backend failures hidden behind Saida exit status zero."""
 
@@ -655,10 +655,6 @@ def tricera_diagnostic(stage: StageResult) -> str | None:
     assert text is not None
     for line in text.splitlines():
         payload = diagnostic_payload(line)
-        if payload.startswith("rosetta error:") or payload.startswith(
-            "tricera preprocessor (tri-pp) returned an empty file"
-        ):
-            return "TriCera preprocessing failed; Saida reported a fallback"
         unsupported_type = re.match(
             r"^(?:tricera\s*:?\s*)?type\s+(?P<type>.+?)\s+not\s+supported\b",
             payload,
@@ -683,6 +679,28 @@ def tricera_diagnostic(stage: StageResult) -> str | None:
                 "TriCera reported that the inference problem is not solvable; "
                 "no sound functional contract was produced. Inspect the "
                 "Saida/TriCera logs and provide the affected contract manually"
+            )
+    return None
+
+
+# Preserve TriCera preprocessing fallbacks as visible warnings when Saida still
+# writes an inferred source file. ISP, the reachable-contract check, and WP then
+# determine whether the resulting proof is complete for the selected input.
+def tricera_preprocessing_warning(stage: StageResult) -> str | None:
+    text, inspection_error = stage_log_text(stage, "Saida/TriCera")
+    if inspection_error:
+        return inspection_error
+    assert text is not None
+    for line in text.splitlines():
+        payload = diagnostic_payload(line)
+        if payload.startswith("rosetta error:") or payload.startswith(
+            "tricera preprocessor (tri-pp) returned an empty file"
+        ):
+            return (
+                "TriCera preprocessing reported a fallback; continuing because "
+                "Saida produced inferred.c. Review the Saida/TriCera logs and "
+                "treat the run as successful only if ISP, contract checking, and "
+                "WP also complete"
             )
     return None
 
@@ -725,8 +743,8 @@ def isp_limit_diagnostic(stage: StageResult) -> str | None:
 
 
 # ISP documents every ISP-Wxxx diagnostic as evidence that its generated
-# auxiliary specification may be incomplete. Do not pass that output to WP as
-# if it represented the complete contract.
+# auxiliary specification may be incomplete. Keep the diagnostic visible, then
+# let contract checking and WP determine whether the selected run still proves.
 def isp_partial_diagnostic(stage: StageResult) -> str | None:
     text, inspection_error = stage_log_text(stage, "ISP")
     if inspection_error:
@@ -915,10 +933,17 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
         saida.status = "failed"
         saida.error = tri_failure
     elif saida.status == "passed":
-        partial_warning = saida_partial_diagnostic(saida)
-        if partial_warning:
+        warnings = [
+            warning
+            for warning in (
+                tricera_preprocessing_warning(saida),
+                saida_partial_diagnostic(saida),
+            )
+            if warning
+        ]
+        if warnings:
             saida.status = "warning"
-            saida.error = partial_warning
+            saida.error = "\n".join(warnings)
     if saida.status not in {"passed", "warning"} or not inferred.is_file():
         message = saida.error or f"Saida did not produce {SAIDA_OUTPUT}"
         report.errors.append({"stage": saida.name, "message": message})
@@ -958,9 +983,9 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     elif isp.status == "passed":
         partial_warning = isp_partial_diagnostic(isp)
         if partial_warning:
-            isp.status = "failed"
+            isp.status = "warning"
             isp.error = partial_warning
-    if isp.status != "passed" or not verified_source.is_file():
+    if isp.status not in {"passed", "warning"} or not verified_source.is_file():
         message = isp.error or f"ISP did not produce {ISP_OUTPUT}"
         report.errors.append({"stage": isp.name, "message": message})
         return report

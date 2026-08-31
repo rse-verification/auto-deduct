@@ -563,7 +563,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
             )
             self.assertIn("did not produce", report.errors[0]["message"])
 
-    def test_pipeline_stops_before_wp_when_isp_reports_partial_inference(self):
+    def test_pipeline_continues_after_isp_reports_partial_inference(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             source = root / "example.c"
@@ -594,20 +594,22 @@ class AutoDeductPipelineTests(unittest.TestCase):
                         "",
                         "[isp] Warning: [ISP-W003] unsupported mutation\n",
                     )
-                return MODULE.subprocess.CompletedProcess(command, 0, "ok\n", "")
+                stdout = "Proved goals: 1 / 1\n" if "-wp" in command else "ok\n"
+                return MODULE.subprocess.CompletedProcess(command, 0, stdout, "")
 
             with patch.object(
                 MODULE.shutil, "which", return_value="/usr/bin/fake"
             ), patch.object(MODULE.subprocess, "run", side_effect=fake_run):
                 report = MODULE.run_pipeline(args)
 
-            self.assertEqual(report.status, "failed")
+            self.assertEqual(report.status, "passed")
             self.assertEqual(
                 [stage.name for stage in report.stages],
-                ["parse", "saida_tricera", "isp_eva"],
+                ["parse", "saida_tricera", "isp_eva", "contract_check", "wp"],
             )
-            self.assertIn("partial auxiliary inference", report.errors[0]["message"])
-            self.assertFalse(any("-wp" in command for command in commands))
+            self.assertEqual(report.stages[2].status, "warning")
+            self.assertIn("partial auxiliary inference", report.stages[2].error)
+            self.assertTrue(any("-wp" in command for command in commands))
 
     def test_stage_failure_keeps_actionable_stderr(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -806,7 +808,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 "Timeout: typed_update_global_array_ensures_2",
             )
 
-    def test_tricera_fallback_is_not_a_clean_result(self):
+    def test_tricera_preprocessing_fallback_is_a_visible_warning(self):
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp)
             log = output / "saida.stderr.log"
@@ -821,7 +823,8 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 stderr_file=str(log),
             )
 
-            self.assertIn("fallback", MODULE.tricera_diagnostic(stage))
+            self.assertIn("fallback", MODULE.tricera_preprocessing_warning(stage))
+            self.assertIsNone(MODULE.tricera_diagnostic(stage))
 
     def test_tricera_fallback_detection_is_case_insensitive(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -834,7 +837,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 stderr_file=str(log),
             )
 
-            self.assertIn("fallback", MODULE.tricera_diagnostic(stage))
+            self.assertIn("fallback", MODULE.tricera_preprocessing_warning(stage))
 
     def test_tricera_fallback_is_detected_on_stdout(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -847,7 +850,52 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 stdout_file=str(log),
             )
 
-            self.assertIn("fallback", MODULE.tricera_diagnostic(stage))
+            self.assertIn("fallback", MODULE.tricera_preprocessing_warning(stage))
+
+    def test_pipeline_continues_after_tricera_preprocessing_fallback(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "example.c"
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            output = root / "results"
+            args = MODULE.parser().parse_args(
+                ["--output-dir", str(output), str(source)]
+            )
+            commands = []
+
+            def fake_run(command, cwd, **_kwargs):
+                commands.append(command)
+                if "-saida" in command:
+                    (Path(cwd) / MODULE.SAIDA_OUTPUT).write_text(
+                        source.read_text(encoding="utf-8"), encoding="utf-8"
+                    )
+                    return MODULE.subprocess.CompletedProcess(
+                        command,
+                        0,
+                        "[TriCera] Warning: TriCera preprocessor (tri-pp) "
+                        "returned an empty file\n",
+                        "",
+                    )
+                if "-isp" in command:
+                    (Path(cwd) / MODULE.ISP_OUTPUT).write_text(
+                        source.read_text(encoding="utf-8"), encoding="utf-8"
+                    )
+                    (Path(cwd) / MODULE.MISSING_CONTRACT_OUTPUT).write_text(
+                        json.dumps({"missing_helper_contracts": []}),
+                        encoding="utf-8",
+                    )
+                stdout = "Proved goals: 1 / 1\n" if "-wp" in command else "ok\n"
+                return MODULE.subprocess.CompletedProcess(command, 0, stdout, "")
+
+            with patch.object(
+                MODULE.shutil, "which", return_value="/usr/bin/fake"
+            ), patch.object(MODULE.subprocess, "run", side_effect=fake_run):
+                report = MODULE.run_pipeline(args)
+
+            self.assertEqual(report.status, "passed")
+            self.assertEqual(report.stages[1].status, "warning")
+            self.assertIn("preprocessing reported a fallback", report.stages[1].error)
+            self.assertTrue(any("-wp" in command for command in commands))
 
     def test_tricera_syntax_error_hidden_by_success_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
