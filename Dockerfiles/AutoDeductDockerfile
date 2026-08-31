@@ -40,9 +40,10 @@ ARG ISP_REPO="https://github.com/rse-verification/interface-specification-propag
 # Pin this to a release commit before publishing the V1 image.
 ARG ISP_VER="master"
 # ARG TRICERA_VER="v0.4"
-# This is a workaround until TriCera gets more regular releases.
+# TriCera does not publish regular releases. Keep the validated upstream
+# master revision explicit so image builds remain reproducible.
 ARG TRICERA_REPO="https://github.com/uuverifiers/tricera.git"
-ARG TRICERA_VER="5324b60f43e3e90314a151d056e5559a0ec3d63e"
+ARG TRICERA_VER="96042c2427428907e2d82914b2651a470a80a6f1"
 
 # This is the user id of "dev" user that will be created in the container
 ARG UID="2000"
