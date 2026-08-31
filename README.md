@@ -465,6 +465,29 @@ same fail-closed pipeline behavior.
 A successful command is evidence for the selected input and tool versions,
 not a universal proof that every possible execution is safe.
 
+## Tests
+
+Run the fast unit suite without Docker:
+
+```shell
+python3 -m unittest discover -s tests -p "test_*.py" -v
+```
+
+After building an AutoDeduct image, run the public ASE 2024 example as the
+end-to-end regression. This test mounts the checkout read-only, writes its
+temporary artifacts outside the source tree, and requires a passed final
+report with complete WP verification:
+
+```shell
+AUTODEDUCT_RUN_INTEGRATION=1 \
+AUTODEDUCT_IMAGE=auto-deduct:latest \
+python3 -m unittest discover -s tests -p "test_ase_2024_integration.py" -v
+```
+
+GitHub Actions runs the fast suite on relevant changes, then builds the image
+and executes this end-to-end regression with an Actions cache for Docker build
+layers.
+
 ## Repository layout
 
 * `bin/autodeduct` is the small executable entry point.
@@ -477,6 +500,8 @@ not a universal proof that every possible execution is safe.
   and its entry-point contract.
 * `tests/test_autodeduct.py` tests ISP report parsing and orchestration behavior
   without requiring Docker or the analysis tools.
+* `tests/test_ase_2024_integration.py` checks the complete Docker pipeline for
+  the public ASE 2024 example when explicitly enabled.
 
 ## License
 

@@ -23,6 +23,23 @@ The source has no separate header file. It uses void main() because that is
 how it is published in the research example; this is accepted as the
 Frama-C entry point for this case study.
 
+## Regression coverage
+
+The public ASE 2024 example is the end-to-end regression case for the V1
+pipeline. GitHub Actions builds the Docker image, runs this unchanged example,
+and requires a passed `report.json`, no missing reachable helper contracts,
+and complete WP verification. ISP may report a visible partial-inference
+warning when WP nevertheless proves the selected program completely.
+
+The normal Python suite leaves this costly Docker test skipped. Run it locally
+after building an image with:
+
+```shell
+AUTODEDUCT_RUN_INTEGRATION=1 \
+AUTODEDUCT_IMAGE=auto-deduct:latest \
+python3 -m unittest discover -s tests -p "test_ase_2024_integration.py" -v
+```
+
 ## Run in the V1 Docker image
 
 From the AutoDeduct repository root, after building the image:
