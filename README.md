@@ -474,14 +474,14 @@ python3 -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 After building an AutoDeduct image, run the public ASE 2024 example as the
-end-to-end regression. This test mounts the checkout read-only, writes its
-temporary artifacts outside the source tree, and requires a passed final
-report with complete WP verification:
+end-to-end smoke regression and the public supported-microtest matrix. These
+tests mount the checkout read-only, write their temporary artifacts outside the
+source tree, and require a passed final report with complete WP verification:
 
 ```shell
 AUTODEDUCT_RUN_INTEGRATION=1 \
 AUTODEDUCT_IMAGE=auto-deduct:latest \
-python3 -m unittest discover -s tests -p "test_ase_2024_integration.py" -v
+python3 -m unittest discover -s tests -p "test_*_integration.py" -v
 ```
 
 GitHub Actions runs the fast suite on relevant changes, then builds the image
@@ -502,6 +502,8 @@ layers.
   without requiring Docker or the analysis tools.
 * `tests/test_ase_2024_integration.py` checks the complete Docker pipeline for
   the public ASE 2024 example when explicitly enabled.
+* `tests/cases/supported/` and `tests/test_public_microtests_integration.py`
+  contain public helper-inference cases that currently prove end to end.
 
 ## License
 

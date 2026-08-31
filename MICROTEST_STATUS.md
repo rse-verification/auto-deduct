@@ -6,8 +6,10 @@ Status date: 2026-08-31
 
 The AutoDeduct microtest corpus used by the assessment is on the separate
 `autodeduct-support-microtests` branch under `autodeduct-support/micro-tests`.
-It is not included in the final `auto-deduct` branch. Therefore, a result in
-the August assessment PDF is historical evidence, not a fresh V1 test result.
+The final `auto-deduct` branch now copies its seven public, end-to-end passing
+sources into `tests/cases/supported/` and runs them as Docker regressions. The
+remaining assessment rows are still historical evidence until they receive
+their own current expected-outcome tests.
 
 This report uses four states:
 
@@ -52,13 +54,13 @@ valid proof merely because an optional auxiliary annotation was not generated.
 
 | Microtest or pattern | Current status | Explanation |
 | --- | --- | --- |
-| `supported/int_if_helper.c` | Historical pass | The PDF reported complete verification. It should be moved into the final test suite and rerun. |
-| Basic struct field helper | Historical pass | The PDF reported complete verification for `helper_struct_basic.c`. |
-| Enum and switch helper | Historical pass | The PDF reported complete verification for `helper_enum_switch_basic.c`. |
-| Side effect with `assigns` and `\old` | Historical pass | The PDF reported complete verification for `helper_assigns_old_basic.c`. |
-| Two-level call chain | Historical pass | The PDF reported complete verification for `helper_two_level_call_chain.c`. |
-| Same helper in two call contexts | Historical pass | The PDF reported complete verification for `helper_multiple_call_contexts.c`. |
-| Whole-struct return | Historical pass | The PDF reported complete verification for `helper_struct_return_whole.c`. |
+| `supported/int_if_helper.c` | Confirmed end to end | Current V1 image passes the unchanged source. |
+| Basic struct field helper | Confirmed end to end | Current V1 image passes `helper_struct_basic.c`. |
+| Enum and switch helper | Confirmed end to end | Current V1 image passes `helper_enum_switch_basic.c` with `-lib-entry`; ISP-W002 remains visible but WP is complete. |
+| Side effect with `assigns` and `\old` | Confirmed end to end | Current V1 image passes `helper_assigns_old_basic.c` with `-lib-entry`. |
+| Two-level call chain | Confirmed end to end | Current V1 image passes `helper_two_level_call_chain.c` with `-lib-entry`. |
+| Same helper in two call contexts | Confirmed end to end | Current V1 image passes `helper_multiple_call_contexts.c`. |
+| Whole-struct return | Confirmed end to end | Current V1 image passes `helper_struct_return_whole.c` with `-lib-entry`. |
 | Scalar return rewrite | Historical pass | The PDF reported complete verification after the documented source-level rewrite. |
 | Enum-indexed array, whole-struct return | Confirmed component support | TriCera master has a passing `enum-indexed-struct.c` regression and ISP master has enum-indexed struct ptests. The exact AutoDeduct microtest has not yet been rerun end to end. |
 | Enum-indexed scalar struct field | Confirmed component support with a qualification | TriCera default reconstruction proves safety but can infer only the input restriction. With `-solutionReconstruction:wp`, it infers `records[1].level == \result`. AutoDeduct does not yet select this option. |
@@ -106,8 +108,10 @@ supported.
 
 ## Recommended next step
 
-Copy the public, non-proprietary assessment corpus into the final AutoDeduct
-repository as a dedicated test suite, with one expected outcome per test:
+The seven public end-to-end passing cases are now copied into the final
+AutoDeduct repository as a Docker integration regression matrix. Expand the
+suite with the remaining public assessment corpus, with one expected outcome
+per test:
 
 * complete success with proof-goal count;
 * expected safe limitation and diagnostic code; or
