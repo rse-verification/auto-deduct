@@ -473,10 +473,12 @@ Run the fast unit suite without Docker:
 python3 -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-After building an AutoDeduct image, run the public ASE 2024 example as the
-end-to-end smoke regression and the public supported-microtest matrix. These
-tests mount the checkout read-only, write their temporary artifacts outside the
-source tree, and require a passed final report with complete WP verification:
+After building an AutoDeduct image, run the public end-to-end regressions.
+They mount the checkout read-only and write temporary artifacts outside the
+source tree. The suite separates a realistic ASE smoke case, fully supported
+microtests, warning-but-verified cases, expected safe limitations, and known
+incomplete WP results. A test passes when the observed outcome matches its
+documented category:
 
 ```shell
 AUTODEDUCT_RUN_INTEGRATION=1 \
@@ -502,8 +504,9 @@ layers.
   without requiring Docker or the analysis tools.
 * `tests/test_ase_2024_integration.py` checks the complete Docker pipeline for
   the public ASE 2024 example when explicitly enabled.
-* `tests/cases/supported/` and `tests/test_public_microtests_integration.py`
-  contain public helper-inference cases that currently prove end to end.
+* `tests/cases/` contains public sources organized by their expected outcome.
+* `tests/test_*_integration.py` contains Docker regressions for the smoke,
+  supported, warning, safe-limitation, and incomplete-WP categories.
 
 ## License
 

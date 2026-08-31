@@ -1,6 +1,6 @@
 # Supported Public Microtests
 
-These seven C/ACSL sources are copied without modification from the public
+These six C/ACSL sources are copied without modification from the public
 `autodeduct-support-microtests` branch of AutoDeduct, revision
 `f5b8de8dbb16e942841c60bff3ec007daad0e4f1`, under
 `autodeduct-support/micro-tests/`. They are GPLv2-covered public test inputs;
@@ -14,3 +14,4 @@ contracts, and complete WP verification.
 
 These probes establish support only for their exact input patterns. They do
 not turn a source rewrite or a nearby pattern into general C or ACSL support.
+See the parent [case classification](../README.md) for other expected outcomes.

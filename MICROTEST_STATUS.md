@@ -6,10 +6,12 @@ Status date: 2026-08-31
 
 The AutoDeduct microtest corpus used by the assessment is on the separate
 `autodeduct-support-microtests` branch under `autodeduct-support/micro-tests`.
-The final `auto-deduct` branch now copies its seven public, end-to-end passing
-sources into `tests/cases/supported/` and runs them as Docker regressions. The
-remaining assessment rows are still historical evidence until they receive
-their own current expected-outcome tests.
+The final `auto-deduct` branch now copies twelve public assessment sources into
+`tests/cases/` and runs them as categorized Docker regressions: six complete
+proofs, one warning followed by a complete proof, three safe functional
+boundaries, and two incomplete WP cases. The remaining assessment rows are
+still historical evidence until they receive their own current expected-outcome
+tests.
 
 This report uses four states:
 
@@ -56,7 +58,7 @@ valid proof merely because an optional auxiliary annotation was not generated.
 | --- | --- | --- |
 | `supported/int_if_helper.c` | Confirmed end to end | Current V1 image passes the unchanged source. |
 | Basic struct field helper | Confirmed end to end | Current V1 image passes `helper_struct_basic.c`. |
-| Enum and switch helper | Confirmed end to end | Current V1 image passes `helper_enum_switch_basic.c` with `-lib-entry`; ISP-W002 remains visible but WP is complete. |
+| Enum and switch helper | Confirmed end to end with warning | Current V1 image passes `helper_enum_switch_basic.c` with `-lib-entry`; ISP-W002 remains visible but WP is complete. |
 | Side effect with `assigns` and `\old` | Confirmed end to end | Current V1 image passes `helper_assigns_old_basic.c` with `-lib-entry`. |
 | Two-level call chain | Confirmed end to end | Current V1 image passes `helper_two_level_call_chain.c` with `-lib-entry`. |
 | Same helper in two call contexts | Confirmed end to end | Current V1 image passes `helper_multiple_call_contexts.c`. |
@@ -75,11 +77,11 @@ valid proof merely because an optional auxiliary annotation was not generated.
 | ACSL logic function | Open | The ISP logic-definition branch only avoids a plugin warning for defined logic bodies. It does not solve Saida/TriCera inference for all logic functions. |
 | ACSL behavior contract | Open | The documented plain-ensures rewrite is a changed input, not native behavior-contract support. |
 | ACSL predicate | Open | The documented inline rewrite is a changed input, not native predicate support. |
-| Persistent local static state | Safe limitation | It remains outside V1 inference scope. Model the state explicitly in a reviewed contract. |
-| Floating-point arithmetic | Safe limitation | TriCera does not provide the required floating-point semantics for V1. Use a reviewed fixed-point model or another verification approach. |
-| Pointer arithmetic | Safe limitation | It remains outside the supported ISP/Saida/TriCera contract path. |
-| Nested pointer store | Safe limitation | V1 does not infer the required multi-level validity, aliasing, and frame model. |
-| Loop without an invariant | Safe limitation | WP needs user-provided loop invariants, assigns clauses, and sometimes a variant. V1 does not infer them. |
+| Persistent local static state | Confirmed incomplete-WP boundary | Current V1 regression reports the missing `next_count` contract and incomplete WP proof. Model the state explicitly in a reviewed contract. |
+| Floating-point arithmetic | Confirmed safe functional boundary | Current V1 regression reports that TriCera does not support `float` and rejects the fallback. |
+| Pointer arithmetic | Confirmed safe functional boundary | Current V1 regression stops at TriCera's functional-input syntax boundary. |
+| Nested pointer store | Confirmed safe functional boundary | Current V1 regression stops at TriCera's functional-input syntax boundary; V1 does not infer the required multi-level validity, aliasing, and frame model. |
+| Loop without an invariant | Confirmed incomplete-WP boundary | Current V1 regression reaches WP but leaves loop-related obligations unresolved. Add reviewed loop annotations. |
 | Missing forward declaration | Open or unverified | This is an input/preprocessing configuration issue. The final CLI must be rerun on the case with the required declarations and include options. |
 
 ## ISP-specific coverage
@@ -108,10 +110,9 @@ supported.
 
 ## Recommended next step
 
-The seven public end-to-end passing cases are now copied into the final
-AutoDeduct repository as a Docker integration regression matrix. Expand the
-suite with the remaining public assessment corpus, with one expected outcome
-per test:
+The twelve categorized public cases are now copied into the final AutoDeduct
+repository as Docker integration regressions. Expand the suite with the
+remaining public assessment corpus, with one expected outcome per test:
 
 * complete success with proof-goal count;
 * expected safe limitation and diagnostic code; or

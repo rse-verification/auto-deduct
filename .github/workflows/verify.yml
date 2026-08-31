@@ -53,8 +53,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run public end-to-end regressions
+      - name: Run ASE 2024 smoke regression
         env:
           AUTODEDUCT_RUN_INTEGRATION: "1"
           AUTODEDUCT_IMAGE: auto-deduct:ci
-        run: python -m unittest discover -s tests -p "test_*_integration.py" -v
+        run: python -m unittest discover -s tests -p "test_ase_2024_integration.py" -v
+      - name: Run supported microtests
+        env:
+          AUTODEDUCT_RUN_INTEGRATION: "1"
+          AUTODEDUCT_IMAGE: auto-deduct:ci
+        run: python -m unittest discover -s tests -p "test_public_microtests_integration.py" -v
+      - name: Run verified-warning microtests
+        env:
+          AUTODEDUCT_RUN_INTEGRATION: "1"
+          AUTODEDUCT_IMAGE: auto-deduct:ci
+        run: python -m unittest discover -s tests -p "test_expected_warning_integration.py" -v
+      - name: Run expected-limitation microtests
+        env:
+          AUTODEDUCT_RUN_INTEGRATION: "1"
+          AUTODEDUCT_IMAGE: auto-deduct:ci
+        run: python -m unittest discover -s tests -p "test_expected_limitation_integration.py" -v
+      - name: Run expected-incomplete-WP microtests
+        env:
+          AUTODEDUCT_RUN_INTEGRATION: "1"
+          AUTODEDUCT_IMAGE: auto-deduct:ci
+        run: python -m unittest discover -s tests -p "test_expected_incomplete_wp_integration.py" -v
