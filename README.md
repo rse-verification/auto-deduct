@@ -74,6 +74,8 @@ autodeduct \
   warnings, failures, logs, and acceptance criteria.
 - [Limitations](docs/LIMITATIONS.md): unsupported patterns, diagnostic
   boundaries, and recommended workarounds.
+- Public regression tests under `tests/cases/`: supported cases, expected
+  warnings, expected limitations, and known incomplete WP outcomes.
 
 ## Public Example
 

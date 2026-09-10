@@ -59,5 +59,5 @@ ACSL language features are supported, or that every possible project using a
 similar pattern will verify.
 
 When qualifying a new program, retain `report.json` and the named stage logs.
-See [Microtest status](../MICROTEST_STATUS.md) for current pattern-level
-evidence and remaining open cases.
+The public regression sources under `tests/cases/` document the expected
+outcomes exercised by the repository's integration suite.
