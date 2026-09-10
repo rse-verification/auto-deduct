@@ -32,18 +32,14 @@ ARG CERT_LOC="/usr/local/share/ca-certificates/"
 ARG PROXY_HOST=""
 ARG PROXY_PORT=""
 
-ARG FRAMA_C_VER="31.0"
+ARG FRAMA_C_VER="33.0"
 ARG SAIDA_REPO="https://github.com/rse-verification/saida.git"
-ARG SAIDA_VER="v0.5.0"
+ARG SAIDA_VER="main"
 ARG ISP_REPO="https://github.com/rse-verification/interface-specification-propagator.git"
-# The JSON missing-helper report used by the CLI was added after v0.3.1.
-# Pin this to a release commit before publishing the V1 image.
-ARG ISP_VER="master"
-# ARG TRICERA_VER="v0.4"
-# TriCera does not publish regular releases. Keep the validated upstream
-# master revision explicit so image builds remain reproducible.
+# ISP v0.4.0 contains the Frama-C 33 compatibility and CDL-2651 fixes.
+ARG ISP_VER="v0.4.0"
 ARG TRICERA_REPO="https://github.com/uuverifiers/tricera.git"
-ARG TRICERA_VER="96042c2427428907e2d82914b2651a470a80a6f1"
+ARG TRICERA_VER="master"
 
 # This is the user id of "dev" user that will be created in the container
 ARG UID="2000"
@@ -226,7 +222,7 @@ RUN ln -s /home/dev/repos/tricera/tri && \
 # The V1 image packages the command-line pipeline only. GUI and LLM helpers
 # are intentionally outside this release profile.
 #
-FROM auto-deduct-tricera AS auto-deduct-toolchain
+FROM auto-deduct-tricera AS auto-deduct-runtime
 
 ARG SAIDA_VER="v0.5.0"
 ARG ISP_VER="v0.3.1"
