@@ -17,6 +17,23 @@ SPEC.loader.exec_module(MODULE)
 
 
 class AutoDeductPipelineTests(unittest.TestCase):
+    def test_docker_stages_inherit_component_version_defaults(self):
+        dockerfile = (ROOT / "Dockerfiles" / "AutoDeductDockerfile").read_text(
+            encoding="utf-8"
+        )
+        defaults = {
+            "FRAMA_C_VER": "33.0",
+            "SAIDA_VER": "main",
+            "TRICERA_VER": "master",
+            "ISP_VER": "v0.4.0",
+        }
+
+        for name, version in defaults.items():
+            with self.subTest(component=name):
+                self.assertEqual(dockerfile.count(f'ARG {name}="{version}"'), 1)
+                self.assertEqual(dockerfile.count(f"ARG {name}="), 1)
+                self.assertIn(f"\nARG {name}\n", dockerfile)
+
     def test_timeout_must_be_finite_and_positive(self):
         for value in ("0", "-1", "nan", "inf"):
             with self.subTest(value=value), self.assertRaises(

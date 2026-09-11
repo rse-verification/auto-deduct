@@ -196,7 +196,8 @@ RUN curl -fLo coursierLauncher https://github.com/coursier/launchers/raw/master/
 #
 FROM auto-deduct-scala AS auto-deduct-tricera
 
-ARG TRICERA_VER="5324b60f43e3e90314a151d056e5559a0ec3d63e"
+# Import the top-level TriCera ref selected for this image.
+ARG TRICERA_VER
 
 USER dev
 WORKDIR /home/dev/repos
@@ -225,7 +226,8 @@ RUN ln -s /home/dev/repos/tricera/tri && \
 #
 FROM auto-deduct-tricera AS auto-deduct-runtime
 
-ARG SAIDA_VER="v0.5.0"
+# Import the top-level Saida ref selected for this image.
+ARG SAIDA_VER
 # Import the top-level value instead of redeclaring a stage-specific default.
 # The CLI requires ISP v0.4.0 or newer for its machine-readable helper report.
 ARG ISP_VER
