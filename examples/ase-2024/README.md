@@ -25,8 +25,8 @@ Frama-C entry point for this case study.
 
 ## Regression coverage
 
-The public ASE 2024 example is the end-to-end regression case for the V1
-pipeline. GitHub Actions builds the Docker image, runs this unchanged example,
+The public ASE 2024 example is the end-to-end regression case for AutoDeduct
+1.0 "Rubber Duck". GitHub Actions builds the Docker image, runs this unchanged example,
 and requires a passed `report.json`, no missing reachable helper contracts,
 and complete WP verification. ISP may report a visible partial-inference
 warning when WP nevertheless proves the selected program completely.
@@ -40,7 +40,7 @@ AUTODEDUCT_IMAGE=auto-deduct:latest \
 python3 -m unittest discover -s tests -p "test_ase_2024_integration.py" -v
 ```
 
-## Run in the V1 Docker image
+## Run in the AutoDeduct 1.0 "Rubber Duck" Docker image
 
 From the AutoDeduct repository root, after building the image:
 
@@ -56,7 +56,7 @@ docker run --rm \
 ```
 
 The input directory contains only stee.c, but using a directory demonstrates
-that the V1 CLI accepts a project folder and keeps the example's source
+that the AutoDeduct 1.0 CLI accepts a project folder and keeps the example's source
 layout. Stage logs and report.json are written below
 autodeduct-output-ase-2024/ at the repository root, outside the input tree.
 

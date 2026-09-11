@@ -1,6 +1,7 @@
-# AutoDeduct
+# AutoDeduct 1.0 "Rubber Duck"
 
-AutoDeduct 1.0 is a command-line formal-verification pipeline for C programs.
+AutoDeduct 1.0, codename "Rubber Duck", is a command-line
+formal-verification pipeline for C programs.
 It combines Frama-C, Saida, TriCera, ISP/Eva, and WP to infer contracts and
 auxiliary annotations, then checks whether the selected input can be proved.
 
@@ -72,7 +73,7 @@ autodeduct \
   Docker/native examples, and individual-stage commands.
 - [Pipeline and diagnostics](docs/PIPELINE.md): component responsibilities,
   warnings, failures, logs, and acceptance criteria.
-- [Limitations](docs/LIMITATIONS.md): unsupported patterns, diagnostic
+- [Release limitations](docs/LIMITATIONS.md): unsupported patterns, diagnostic
   boundaries, and recommended workarounds.
 - Public regression tests under `tests/cases/`: supported cases, expected
   warnings, expected limitations, and known incomplete WP outcomes.

@@ -3,7 +3,7 @@
 This is a living document describing the roadmap of the AutoDeduct toolchain
 and what the target for each version is.
 
-## Version 1.0.0
+## Version 1.0.0 "Rubber Duck"
 
 * Reproducable builds of docker image.
   

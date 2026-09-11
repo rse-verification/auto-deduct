@@ -78,7 +78,7 @@ returns zero.
 ISP `ISP-Wxxx` diagnostics are retained as warnings and WP continues. ISP
 `ISP-Exxx` diagnostics stop the pipeline because required auxiliary inference
 was not safely completed. Detailed feature boundaries and workarounds are in
-[V1 limitations](LIMITATIONS.md).
+[Release limitations](LIMITATIONS.md).
 
 ## Inspecting Results
 

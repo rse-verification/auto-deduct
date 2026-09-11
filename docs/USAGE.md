@@ -83,7 +83,7 @@ build, version-control, dependency, and generated-output directories are
 ignored. Header files are not source inputs; provide their locations with
 `--include`.
 
-V1 Saida inference accepts one translation unit. A directory containing
+AutoDeduct 1.0 Saida inference accepts one translation unit. A directory containing
 multiple C translation units is rejected instead of silently processing only
 one. Such a project must first be represented as one analysis translation
 unit.
