@@ -40,7 +40,7 @@ ARG ISP_REPO="https://github.com/rse-verification/interface-specification-propag
 # ISP v0.4.0 contains the Frama-C 33 compatibility and CDL-2651 fixes.
 ARG ISP_VER="v0.4.0"
 ARG TRICERA_REPO="https://github.com/uuverifiers/tricera.git"
-ARG TRICERA_VER="master"
+ARG TRICERA_VER="v0.5"
 
 # This is the user id of "dev" user that will be created in the container
 ARG UID="2000"

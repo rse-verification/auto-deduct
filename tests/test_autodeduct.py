@@ -25,7 +25,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
             "FRAMA_C_VER": "33.0",
             "OCAML_VER": "5.4.0",
             "SAIDA_VER": "main",
-            "TRICERA_VER": "master",
+            "TRICERA_VER": "v0.5",
             "ISP_VER": "v0.4.0",
         }
 
