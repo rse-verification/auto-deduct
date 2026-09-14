@@ -41,16 +41,18 @@ docker run --rm --platform linux/amd64 \
 
 ## Component Versions
 
-The default image uses Frama-C 33.0, ISP `v0.4.0`, Saida `main`, and TriCera
-`master`. ISP is pinned to a release; Saida and TriCera are moving integration
-refs.
+The default image uses OCaml 5.4.0, Frama-C 33.0, ISP `v0.4.0`, Saida `main`,
+and TriCera `master`. ISP is pinned to a release; Saida and TriCera are moving
+integration refs. OCaml is installed in the image's default opam switch rather
+than inherited from the Ubuntu package version.
 
 The Dockerfile accepts `SAIDA_REPO`, `TRICERA_REPO`, and `ISP_REPO`, together
-with `SAIDA_VER`, `TRICERA_VER`, and `ISP_VER`. A version may be a branch, tag,
-or commit reachable from the selected repository.
+with `OCAML_VER`, `SAIDA_VER`, `TRICERA_VER`, and `ISP_VER`. A component version
+may be a branch, tag, or commit reachable from the selected repository.
 
 ```shell
 docker build \
+  --build-arg OCAML_VER=5.4.0 \
   --build-arg SAIDA_VER=<branch-tag-or-commit> \
   --build-arg TRICERA_VER=<branch-tag-or-commit> \
   --build-arg ISP_VER=<branch-tag-or-commit> \
@@ -92,6 +94,7 @@ Proxy configuration is not required on a normal direct Internet connection.
 Running without Docker requires:
 
 - Python 3.10 or newer
+- OCaml 5.4 or newer in the active opam switch
 - Frama-C 33 with Saida and ISP installed
 - the TriCera `tri` executable
 - SMT provers configured for WP

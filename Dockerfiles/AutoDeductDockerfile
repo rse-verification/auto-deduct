@@ -33,6 +33,7 @@ ARG PROXY_HOST=""
 ARG PROXY_PORT=""
 
 ARG FRAMA_C_VER="33.0"
+ARG OCAML_VER="5.4.0"
 ARG SAIDA_REPO="https://github.com/rse-verification/saida.git"
 ARG SAIDA_VER="main"
 ARG ISP_REPO="https://github.com/rse-verification/interface-specification-propagator.git"
@@ -49,7 +50,7 @@ ARG UID="2000"
 # ca-certificates - trusted certificates management (see below)
 # curl - to download coursier (Scala install tool)
 # cvc4 - SMT solver for use by Frama-C
-# ocaml - used by Frama-C plugins
+# ocaml - bootstrap compiler used to install the pinned opam compiler
 # opam - ocaml package manager
 # openjdk - used by Scala
 # python3 - AutoDeduct command-line runner
@@ -143,20 +144,24 @@ EOF
 #
 FROM auto-deduct-base AS auto-deduct-frama-c
 
-# Import the top-level value so the selected Frama-C version reaches opam.
+# Import the top-level values so the selected toolchain versions reach opam.
 ARG FRAMA_C_VER
+ARG OCAML_VER
 
 USER dev
 WORKDIR /home/dev
 
 RUN : "${FRAMA_C_VER:?FRAMA_C_VER must not be empty}" && \
-  opam init --disable-sandboxing --yes && \
-  opam init --shell-setup && \
+  : "${OCAML_VER:?OCAML_VER must not be empty}" && \
+  opam init --bare --disable-sandboxing --yes && \
+  opam switch create default "ocaml-base-compiler.${OCAML_VER}" --yes && \
+  eval "$(opam env --switch=default --set-switch)" && \
   opam install "frama-c.${FRAMA_C_VER}" --yes && \
   opam install ocaml-lsp-server --yes && \
   opam install ocamlformat --yes && \
+  opam env --switch=default --set-switch >> /home/dev/.profile && \
   opam clean && \
-  eval $(opam env)
+  ocamlc -version
 
 # Add Frama-C auto-completion for bash
 RUN . /home/dev/.profile && \

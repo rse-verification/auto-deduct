@@ -23,6 +23,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
         )
         defaults = {
             "FRAMA_C_VER": "33.0",
+            "OCAML_VER": "5.4.0",
             "SAIDA_VER": "main",
             "TRICERA_VER": "master",
             "ISP_VER": "v0.4.0",
@@ -33,6 +34,11 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 self.assertEqual(dockerfile.count(f'ARG {name}="{version}"'), 1)
                 self.assertEqual(dockerfile.count(f"ARG {name}="), 1)
                 self.assertIn(f"\nARG {name}\n", dockerfile)
+
+        self.assertIn(
+            'opam switch create default "ocaml-base-compiler.${OCAML_VER}"',
+            dockerfile,
+        )
 
     def test_timeout_must_be_finite_and_positive(self):
         for value in ("0", "-1", "nan", "inf"):
