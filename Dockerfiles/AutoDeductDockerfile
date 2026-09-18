@@ -35,7 +35,7 @@ ARG PROXY_PORT=""
 ARG FRAMA_C_VER="33.0"
 ARG OCAML_VER="5.4.0"
 ARG SAIDA_REPO="https://github.com/rse-verification/saida.git"
-ARG SAIDA_VER="main"
+ARG SAIDA_VER="v0.6.0"
 ARG ISP_REPO="https://github.com/rse-verification/interface-specification-propagator.git"
 # ISP v0.4.0 contains the Frama-C 33 compatibility and CDL-2651 fixes.
 ARG ISP_VER="v0.4.0"

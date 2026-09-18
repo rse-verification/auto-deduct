@@ -41,10 +41,10 @@ docker run --rm --platform linux/amd64 \
 
 ## Component Versions
 
-The default image uses OCaml 5.4.0, Frama-C 33.0, ISP `v0.4.0`, Saida `main`,
-and TriCera `v0.5`. ISP and TriCera are pinned to releases; Saida remains on a
-moving integration ref. OCaml is installed in the image's default opam switch
-rather than inherited from the Ubuntu package version.
+The default image uses OCaml 5.4.0, Frama-C 33.0, ISP `v0.4.0`, Saida
+`v0.6.0`, and TriCera `v0.5`. All three analysis components are pinned to
+releases. OCaml is installed in the image's default opam switch rather than
+inherited from the Ubuntu package version.
 
 The Dockerfile accepts `SAIDA_REPO`, `TRICERA_REPO`, and `ISP_REPO`, together
 with `OCAML_VER`, `SAIDA_VER`, `TRICERA_VER`, and `ISP_VER`. A component version
