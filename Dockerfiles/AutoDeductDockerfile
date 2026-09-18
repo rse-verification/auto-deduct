@@ -176,13 +176,14 @@ FROM auto-deduct-frama-c AS auto-deduct-scala
 
 ARG PROXY_HOST=""
 ARG PROXY_PORT=""
+ARG COURSIER_VER="v2.1.24"
 
 USER dev
 WORKDIR /home/dev
 
 # NOTE: For some reason JAVA needs to be told that it is working
 #   behind a proxy.
-RUN curl -fLo coursierLauncher https://github.com/coursier/launchers/raw/master/coursier && \
+RUN curl -fLo coursierLauncher "https://github.com/coursier/coursier/releases/download/${COURSIER_VER}/coursier" && \
   if [ "${PROXY_HOST}" != "" -a "${PROXY_PORT}" != "" ]; then \
     java -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT} -jar coursierLauncher setup --yes; \
   else \
