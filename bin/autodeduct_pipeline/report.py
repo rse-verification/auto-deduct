@@ -27,6 +27,7 @@ class PipelineReport:
     stages: list[StageResult] = field(default_factory=list)
     contract_report: ContractReport | None = None
     errors: list[dict[str, str]] = field(default_factory=list)
+    schema_version: int = 1
 
 
 # Convert the typed pipeline result into JSON-serializable data for automation.
@@ -49,19 +50,19 @@ def missing_contract_names(path: Path) -> list[str]:
 
     if not path.is_file():
         raise PipelineError(
-            "contract-check",
+            "contract_check",
             f"ISP did not produce the required report: {path.name}",
         )
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except OSError as error:
         raise PipelineError(
-            "contract-check",
+            "contract_check",
             f"could not read ISP report {path.name}: {error}",
         ) from error
     except json.JSONDecodeError as error:
         raise PipelineError(
-            "contract-check",
+            "contract_check",
             f"ISP report {path.name} is not valid JSON: {error.msg}",
         ) from error
     if isinstance(value, list):
@@ -79,18 +80,18 @@ def missing_contract_names(path: Path) -> list[str]:
                 break
         if items is None:
             raise PipelineError(
-                "contract-check",
+                "contract_check",
                 f"ISP report {path.name} has no missing-helper-contracts field",
             )
     else:
         raise PipelineError(
-            "contract-check",
+            "contract_check",
             f"ISP report {path.name} must contain an object or list",
         )
 
     if not isinstance(items, list):
         raise PipelineError(
-            "contract-check",
+            "contract_check",
             f"ISP report {path.name} missing-helper field must be a list",
         )
 
@@ -112,7 +113,7 @@ def missing_contract_names(path: Path) -> list[str]:
                     seen.add(name)
                 continue
         raise PipelineError(
-            "contract-check",
+            "contract_check",
             f"ISP report {path.name} contains a malformed missing-helper entry; "
             "each entry must be a non-empty function name or an object with a "
             "non-empty 'function' or 'name' field",

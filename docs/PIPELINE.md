@@ -20,14 +20,19 @@ its JSON report rather than reimplementing the call graph.
 
 ## Status Model
 
-Each stage has one of these statuses:
+The top-level pipeline status is `PASSED` or `FAILED`. Each recorded stage has
+one of these statuses:
 
 - `PASSED`: the mandatory stage completed and its expected output is valid.
 - `WARNING`: the stage reported a recognized non-fatal limitation; the
   diagnostic is retained and later stages continue.
-- `FAILED`: the stage could not produce trustworthy mandatory evidence or an
-  acceptance condition was not met.
-- `SKIPPED`: an earlier failure made the stage inapplicable.
+- `FAILED`: the command returned a nonzero status, produced an unusable
+  artifact, or did not meet an acceptance condition.
+- `ERROR`: the command could not be started.
+- `TIMEOUT`: the command exceeded its configured stage timeout.
+
+Stages not reached after an earlier failure are omitted from the `stages`
+array rather than emitted as `SKIPPED` records.
 
 A warning is not silently accepted. It remains visible in the console and
 `report.json`, while later contract checks and WP determine whether the
@@ -51,8 +56,8 @@ A WP run containing no goals is rejected.
 
 An input, environment, parse, semantic inference, contract, timeout, or WP
 failure returns exit code `1`. The human summary identifies the responsible
-stage and points to its log. Later stages are skipped when their input cannot
-be trusted.
+stage and points to its log. Later stages are not run, and are omitted from
+the report, when their input cannot be trusted.
 
 Examples:
 
@@ -89,6 +94,9 @@ useful generated files are:
 - `out.c` for the source passed to WP after ISP;
 - `missing-helper-contracts.json` for ISP reachability and contract coverage;
 - `report.json` for commands, statuses, diagnostics, log paths, and artifacts.
+
+Every report contains `schema_version`. AutoDeduct 1.0 writes schema version
+`1`; the separate `version` field identifies the AutoDeduct CLI release.
 
 Use `autodeduct --json ...` when another program or CI job needs the same
 result as machine-readable standard output.

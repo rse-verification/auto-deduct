@@ -45,7 +45,6 @@ from .stages import (
 
 # Run the Saida/TriCera, ISP/Eva, contract-check, and WP stages in V1 order.
 def run_pipeline(args: argparse.Namespace) -> PipelineReport:
-    validate_forwarded_options(args)
     output_dir = Path(args.output_dir).expanduser().resolve()
     requested_files = []
     input_roots = []
@@ -62,6 +61,7 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
             input_roots.append(source)
     validate_output_directory(requested_files, output_dir, input_roots)
     invalidate_stale_report(output_dir)
+    validate_forwarded_options(args)
     inputs = source_paths(args.sources)
     if len(inputs) != 1:
         raise PipelineError(
@@ -144,9 +144,13 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
         if warnings:
             saida.status = "warning"
             saida.error = "\n".join(warnings)
-    if saida.status not in {"passed", "warning"} or not inferred.is_file():
-        message = saida.error or f"Saida did not produce {SAIDA_OUTPUT}"
-        report.errors.append({"stage": saida.name, "message": message})
+    if saida.status in {"passed", "warning"} and not inferred.is_file():
+        saida.status = "failed"
+        saida.error = f"Saida did not produce {SAIDA_OUTPUT}"
+    if saida.status not in {"passed", "warning"}:
+        report.errors.append(
+            {"stage": saida.name, "message": saida.error or "Saida failed"}
+        )
         return report
 
     isp = run_stage(
@@ -185,9 +189,13 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
         if partial_warning:
             isp.status = "warning"
             isp.error = partial_warning
-    if isp.status not in {"passed", "warning"} or not verified_source.is_file():
-        message = isp.error or f"ISP did not produce {ISP_OUTPUT}"
-        report.errors.append({"stage": isp.name, "message": message})
+    if isp.status in {"passed", "warning"} and not verified_source.is_file():
+        isp.status = "failed"
+        isp.error = f"ISP did not produce {ISP_OUTPUT}"
+    if isp.status not in {"passed", "warning"}:
+        report.errors.append(
+            {"stage": isp.name, "message": isp.error or "ISP failed"}
+        )
         return report
 
     try:
@@ -243,7 +251,7 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     if report.contract_report and report.contract_report.missing_contracts:
         report.errors.append(
             {
-                "stage": "contract-check",
+                "stage": "contract_check",
                 "message": "reachable functions are missing contracts",
             }
         )

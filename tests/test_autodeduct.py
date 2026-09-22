@@ -1,7 +1,10 @@
 import json
+import signal
 import sys
 import tempfile
+import time
 import unittest
+from importlib import import_module
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,10 +13,33 @@ ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = ROOT / "bin"
 if str(BIN_DIR) not in sys.path:
     sys.path.insert(0, str(BIN_DIR))
-import autodeduct_pipeline as MODULE  # noqa: E402
+MODULE = import_module("autodeduct_pipeline")
+STAGES = import_module("autodeduct_pipeline.stages")
 
 
 class AutoDeductPipelineTests(unittest.TestCase):
+    def test_report_serialization_has_a_versioned_top_level_contract(self):
+        report = MODULE.PipelineReport(
+            version="1.0.0",
+            status="failed",
+            input_files=["input.c"],
+            output_directory="results",
+        )
+
+        self.assertEqual(
+            MODULE.report_dict(report),
+            {
+                "version": "1.0.0",
+                "status": "failed",
+                "input_files": ["input.c"],
+                "output_directory": "results",
+                "stages": [],
+                "contract_report": None,
+                "errors": [],
+                "schema_version": 1,
+            },
+        )
+
     def test_docker_stages_inherit_component_version_defaults(self):
         dockerfile = (ROOT / "Dockerfiles" / "AutoDeductDockerfile").read_text(
             encoding="utf-8"
@@ -229,6 +255,28 @@ class AutoDeductPipelineTests(unittest.TestCase):
             self.assertEqual(result, 1)
             self.assertFalse(report.exists())
 
+    def test_forwarded_option_error_invalidates_a_stale_report(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "main.c"
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            output = Path(temp) / "results"
+            output.mkdir()
+            report = output / "report.json"
+            report.write_text('{"status": "passed"}\n', encoding="utf-8")
+
+            with patch.object(MODULE, "print_human_report"):
+                result = MODULE.main(
+                    [
+                        "--output-dir",
+                        str(output),
+                        "--frama-c-option=-main=other",
+                        str(source),
+                    ]
+                )
+
+            self.assertEqual(result, 1)
+            self.assertFalse(report.exists())
+
     def test_output_directory_cannot_be_inside_input_source_tree(self):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp) / "project"
@@ -435,7 +483,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
             with self.assertRaises(MODULE.PipelineError) as raised:
                 MODULE.missing_contract_names(report)
 
-            self.assertEqual(raised.exception.stage, "contract-check")
+            self.assertEqual(raised.exception.stage, "contract_check")
             self.assertIn("did not produce", raised.exception.message)
 
     def test_malformed_isp_missing_helper_entry_is_an_explicit_error(self):
@@ -449,7 +497,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
             with self.assertRaises(MODULE.PipelineError) as raised:
                 MODULE.missing_contract_names(report)
 
-            self.assertEqual(raised.exception.stage, "contract-check")
+            self.assertEqual(raised.exception.stage, "contract_check")
             self.assertIn("malformed missing-helper entry", raised.exception.message)
 
     def test_cli_runs_all_stages_and_keeps_missing_report(self):
@@ -488,11 +536,12 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 return MODULE.subprocess.CompletedProcess(command, 0, stdout, "")
 
             with patch.object(MODULE.shutil, "which", return_value="/usr/bin/fake"), patch.object(
-                MODULE.subprocess, "run", side_effect=fake_run
+                STAGES, "_run_command", side_effect=fake_run
             ):
                 report = MODULE.run_pipeline(args)
 
             self.assertEqual(report.status, "failed")
+            self.assertEqual(report.errors[0]["stage"], "contract_check")
             self.assertEqual([stage.name for stage in report.stages], [
                 "parse", "saida_tricera", "isp_eva", "contract_check", "wp"
             ])
@@ -538,7 +587,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 return MODULE.subprocess.CompletedProcess(command, 0, stdout, "")
 
             with patch.object(MODULE.shutil, "which", return_value="/usr/bin/fake"), patch.object(
-                MODULE.subprocess, "run", side_effect=fake_run
+                STAGES, "_run_command", side_effect=fake_run
             ):
                 report = MODULE.run_pipeline(args)
 
@@ -572,7 +621,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 return MODULE.subprocess.CompletedProcess(command, 0, "ok\n", "")
 
             with patch.object(MODULE.shutil, "which", return_value="/usr/bin/fake"), patch.object(
-                MODULE.subprocess, "run", side_effect=fake_run
+                STAGES, "_run_command", side_effect=fake_run
             ):
                 report = MODULE.run_pipeline(args)
 
@@ -582,6 +631,40 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 ["parse", "saida_tricera", "isp_eva"],
             )
             self.assertIn("did not produce", report.errors[0]["message"])
+
+    def test_pipeline_fails_a_stage_that_omits_its_required_artifact(self):
+        for missing_stage in ("saida_tricera", "isp_eva"):
+            with self.subTest(stage=missing_stage), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                source = root / "example.c"
+                source.write_text(
+                    "int main(void) { return 0; }\n", encoding="utf-8"
+                )
+                output = root / "results"
+                args = MODULE.parser().parse_args(
+                    ["--output-dir", str(output), str(source)]
+                )
+
+                def fake_run(command, cwd, **_kwargs):
+                    if "-saida" in command and missing_stage != "saida_tricera":
+                        (Path(cwd) / MODULE.SAIDA_OUTPUT).write_text(
+                            source.read_text(encoding="utf-8"), encoding="utf-8"
+                        )
+                    return MODULE.subprocess.CompletedProcess(
+                        command, 0, "ok\n", ""
+                    )
+
+                with patch.object(
+                    MODULE.shutil, "which", return_value="/usr/bin/fake"
+                ), patch.object(STAGES, "_run_command", side_effect=fake_run):
+                    report = MODULE.run_pipeline(args)
+
+                failed_stage = report.stages[-1]
+                self.assertEqual(report.status, "failed")
+                self.assertEqual(failed_stage.name, missing_stage)
+                self.assertEqual(failed_stage.status, "failed")
+                self.assertIn("did not produce", failed_stage.error)
+                self.assertEqual(report.errors[0]["stage"], missing_stage)
 
     def test_pipeline_continues_after_isp_reports_partial_inference(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -619,7 +702,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
 
             with patch.object(
                 MODULE.shutil, "which", return_value="/usr/bin/fake"
-            ), patch.object(MODULE.subprocess, "run", side_effect=fake_run):
+            ), patch.object(STAGES, "_run_command", side_effect=fake_run):
                 report = MODULE.run_pipeline(args)
 
             self.assertEqual(report.status, "passed")
@@ -637,7 +720,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
             completed = MODULE.subprocess.CompletedProcess(
                 ["frama-c"], 2, "", "error: missing header\n"
             )
-            with patch.object(MODULE.subprocess, "run", return_value=completed):
+            with patch.object(STAGES, "_run_command", return_value=completed):
                 result = MODULE.run_stage(
                     name="parse",
                     description="parse",
@@ -656,7 +739,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
             completed = MODULE.subprocess.CompletedProcess(
                 ["frama-c"], 1, "[kernel] User Error: invalid option\n", ""
             )
-            with patch.object(MODULE.subprocess, "run", return_value=completed):
+            with patch.object(STAGES, "_run_command", return_value=completed):
                 result = MODULE.run_stage(
                     name="parse",
                     description="parse",
@@ -672,7 +755,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp)
             error = PermissionError(13, "Permission denied", "frama-c")
-            with patch.object(MODULE.subprocess, "run", side_effect=error):
+            with patch.object(STAGES, "_run_command", side_effect=error):
                 result = MODULE.run_stage(
                     name="parse",
                     description="parse",
@@ -685,6 +768,62 @@ class AutoDeductPipelineTests(unittest.TestCase):
             self.assertEqual(result.status, "error")
             self.assertEqual(result.returncode, 13)
             self.assertIn("could not start command", result.error)
+
+    @unittest.skipUnless(MODULE.os.name == "posix", "requires POSIX process groups")
+    def test_stage_timeout_terminates_descendant_processes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            pid_file = output / "descendant.pid"
+            heartbeat = output / "descendant.heartbeat"
+            child_script = (
+                "import pathlib,time\n"
+                f"heartbeat=pathlib.Path({str(heartbeat)!r})\n"
+                "with heartbeat.open('a') as stream:\n"
+                "    while True:\n"
+                "        stream.write('x')\n"
+                "        stream.flush()\n"
+                "        time.sleep(0.02)\n"
+            )
+            script = (
+                "import pathlib,subprocess,sys,time\n"
+                "process=subprocess.Popen("
+                f"[sys.executable,'-c',{child_script!r}], "
+                "stdout=subprocess.DEVNULL, "
+                "stderr=subprocess.DEVNULL)\n"
+                f"pathlib.Path({str(pid_file)!r}).write_text(str(process.pid))\n"
+                f"heartbeat=pathlib.Path({str(heartbeat)!r})\n"
+                "while not heartbeat.exists():\n"
+                "    time.sleep(0.01)\n"
+                "time.sleep(30)\n"
+            )
+
+            result = MODULE.run_stage(
+                name="timeout_probe",
+                description="timeout process-tree probe",
+                command=[sys.executable, "-c", script],
+                cwd=output,
+                output_dir=output,
+                timeout=1,
+            )
+
+            self.assertEqual(result.status, "timeout")
+            descendant_pid = int(pid_file.read_text(encoding="utf-8"))
+            size_after_timeout = heartbeat.stat().st_size
+            time.sleep(0.15)
+            size_after_wait = heartbeat.stat().st_size
+            try:
+                self.assertEqual(
+                    size_after_wait,
+                    size_after_timeout,
+                    "descendant process continued writing after the timeout",
+                )
+            finally:
+                if size_after_wait != size_after_timeout:
+                    MODULE.os.kill(descendant_pid, signal.SIGKILL)
+                try:
+                    MODULE.os.waitpid(descendant_pid, MODULE.os.WNOHANG)
+                except ChildProcessError:
+                    pass
 
     def test_stage_replaces_invalid_utf8_in_tool_output(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -718,7 +857,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 "[kernel] User Error: 'paper_entry' is not a defined function. "
                 "Please choose a valid function name for option -main\n",
             )
-            with patch.object(MODULE.subprocess, "run", return_value=completed):
+            with patch.object(STAGES, "_run_command", return_value=completed):
                 result = MODULE.run_stage(
                     name="parse",
                     description="parse",
@@ -744,7 +883,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 "",
                 "error: implicit declaration of function 'update_state'\n",
             )
-            with patch.object(MODULE.subprocess, "run", return_value=completed):
+            with patch.object(STAGES, "_run_command", return_value=completed):
                 result = MODULE.run_stage(
                     name="parse",
                     description="parse",
@@ -909,7 +1048,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
 
             with patch.object(
                 MODULE.shutil, "which", return_value="/usr/bin/fake"
-            ), patch.object(MODULE.subprocess, "run", side_effect=fake_run):
+            ), patch.object(STAGES, "_run_command", side_effect=fake_run):
                 report = MODULE.run_pipeline(args)
 
             self.assertEqual(report.status, "passed")
@@ -1004,7 +1143,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
 
             with patch.object(
                 MODULE.shutil, "which", return_value="/usr/bin/fake"
-            ), patch.object(MODULE.subprocess, "run", side_effect=fake_run):
+            ), patch.object(STAGES, "_run_command", side_effect=fake_run):
                 report = MODULE.run_pipeline(args)
 
             self.assertEqual(report.status, "failed")
@@ -1060,7 +1199,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
 
             with patch.object(
                 MODULE.shutil, "which", return_value="/usr/bin/fake"
-            ), patch.object(MODULE.subprocess, "run", side_effect=fake_run):
+            ), patch.object(STAGES, "_run_command", side_effect=fake_run):
                 report = MODULE.run_pipeline(args)
 
             self.assertEqual(report.status, "failed")
@@ -1123,7 +1262,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
 
                 with patch.object(
                     MODULE.shutil, "which", return_value="/usr/bin/fake"
-                ), patch.object(MODULE.subprocess, "run", side_effect=fake_run):
+                ), patch.object(STAGES, "_run_command", side_effect=fake_run):
                     report = MODULE.run_pipeline(args)
 
                 self.assertEqual(report.status, "failed")

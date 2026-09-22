@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import shlex
 import subprocess
 import time
@@ -80,6 +81,49 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8", errors="replace")
 
 
+def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    elif process.poll() is None:
+        process.kill()
+
+
+def _run_command(
+    *, command: Sequence[str], cwd: Path, timeout: float
+) -> subprocess.CompletedProcess[str]:
+    process = subprocess.Popen(
+        list(command),
+        cwd=cwd,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=os.name == "posix",
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        _terminate_process_tree(process)
+        stdout, stderr = process.communicate()
+        raise subprocess.TimeoutExpired(
+            error.cmd,
+            error.timeout,
+            output=stdout,
+            stderr=stderr,
+        ) from error
+    except BaseException:
+        _terminate_process_tree(process)
+        process.communicate()
+        raise
+    return subprocess.CompletedProcess(
+        list(command), process.returncode, stdout, stderr
+    )
+
+
 # Execute one external analysis stage and capture its logs, timing, artifacts, and failures.
 def run_stage(
     *,
@@ -99,15 +143,10 @@ def run_stage(
     )
     started = time.monotonic()
     try:
-        completed = subprocess.run(
-            list(command),
+        completed = _run_command(
+            command=command,
             cwd=cwd,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            capture_output=True,
             timeout=timeout,
-            check=False,
         )
     except FileNotFoundError as error:
         result.status = "error"
