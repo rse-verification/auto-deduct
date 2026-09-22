@@ -270,7 +270,7 @@ RUN . /home/dev/.profile && \
 # Install the command as `autodeduct` on the system PATH, including for
 # non-interactive `docker run IMAGE autodeduct ...` invocations.
 COPY --chmod=0755 bin/autodeduct /usr/local/bin/autodeduct
-COPY --chmod=0755 bin/autodeduct_pipeline.py /usr/local/bin/autodeduct_pipeline.py
+COPY --chmod=0755 bin/autodeduct_pipeline /usr/local/bin/autodeduct_pipeline
 
 # Non-interactive `docker run IMAGE autodeduct ...` does not source .profile.
 ENV PATH="/home/dev/.local/bin:/home/dev/.opam/default/bin:${PATH}"

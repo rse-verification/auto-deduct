@@ -1,4 +1,3 @@
-import importlib.util
 import json
 import sys
 import tempfile
@@ -8,12 +7,10 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULE_PATH = ROOT / "bin" / "autodeduct_pipeline.py"
-SPEC = importlib.util.spec_from_file_location("autodeduct_pipeline", MODULE_PATH)
-MODULE = importlib.util.module_from_spec(SPEC)
-assert SPEC and SPEC.loader
-sys.modules[SPEC.name] = MODULE
-SPEC.loader.exec_module(MODULE)
+BIN_DIR = ROOT / "bin"
+if str(BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(BIN_DIR))
+import autodeduct_pipeline as MODULE  # noqa: E402
 
 
 class AutoDeductPipelineTests(unittest.TestCase):
