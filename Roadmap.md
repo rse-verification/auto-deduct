@@ -1,48 +1,30 @@
 # Roadmap
 
-This is a living document describing the roadmap of the AutoDeduct toolchain
-and what the target for each version is.
+This is a living document describing the target for each AutoDeduct release.
 
-## Version 1.0.0 "Rubber Duck"
+## AutoDeduct 1.0 "Rubber Duck"
 
-* Reproducable builds of docker image.
-  
-  * Specific version of WP-solvers
-  
-    * Z3
-    * CVC4
-    * Alt-Ergo
+- Provide a reproducible Docker image with pinned versions of Frama-C, Saida,
+  TriCera, ISP, OCaml, and the configured WP provers.
+- Provide the `autodeduct` command-line pipeline and machine-readable
+  `report.json` output.
+- Keep generated artifacts separate from the input source.
+- Define the supported C and ACSL subset and report unsupported constructs
+  explicitly.
+- Check reachable-helper contract coverage before WP.
+- Support optional WP runtime-error obligations through `--wp-rte`.
+- Exercise the public ASE 2024 example and categorized microtests in CI.
 
-  * Specific version of TriCera
-  * Specific version of Frama-C
-  
-    * RTE?
-    * RTE-WP
-  
-  * Specific version of ISP
-  * Specific version of Saida
-  * (Specific version of Eldarica)
+### Acceptance Criteria
 
-* Clear definition of what subset of C that is supported.
-  
-  * Support for code with stackpointers is included.
-  
-* Toolchain delivered in source form as a Dockerfile
+- The Docker image builds from a clean checkout.
+- Unit tests and the public Docker regression matrix pass.
+- The CLI returns `PASSED` only when every mandatory stage and WP goal passes;
+  otherwise it returns `FAILED` with stage-specific diagnostics.
+- The input source remains unchanged.
 
-* Experimental contract assistant.
+## Future Releases
 
-  * Detect helper functions that are reachable from contracted functions
-    but do not have ACSL contracts.
-  * Support scanning individual C files or directories containing `.c` and
-    `.h` files.
-  * Produce an LLM-ready prompt for draft ACSL suggestions.
-  * Provide a small browser UI for running the pre-check and inspecting the
-    pipeline status.
-  * Provide explicit Frama-C Eva and WP runs from the browser UI and show the
-    command output.
-  * Keep Frama-C/WP/Eva as the validation step for any suggested contract.
-
-### Acceptance test
-
-It is possible to run the ``STEE`` codebase through the toolchain, and
-AutoDeduct delivers a clear result "YES", "NO" or "UNKNOWN".
+- Broaden the supported C and ACSL subsets based on reviewed use cases.
+- Improve inferred-contract quality and proof diagnostics.
+- Evaluate tighter Frama-C integration when it provides additional user value.

@@ -20,7 +20,7 @@ Common options:
 - `--include DIRECTORY`: add a header directory; repeat as needed.
 - `--frama-c-option OPTION`: forward an option to Frama-C stages.
 - `--wp-option OPTION`: forward an option only to WP.
-- `--wp-rte`: add WP runtime-error goals.
+- `--wp-rte`: add WP runtime-error goals; these are not included by default.
 - `--timeout SECONDS`: timeout for each external stage; default is 300.
 - `--json`: print the final machine-readable report to standard output.
 

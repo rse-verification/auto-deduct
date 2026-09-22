@@ -57,14 +57,8 @@ ARG UID="2000"
 # Z3 - SMT solver for use by Frama-C
 # + a bunch of other libraries required by Frama-C
 #
-# Note: We install two different icon themes. For some reason,
-#  when running GTK-applications, like Frama-C GUI, inside a
-#  devcontainer in Visual Studio Code the system is using one
-#  setup, and when running from a docker container directly,
-#  it is using another setup. It seems to have to do with
-#  Visual Studio Code setting up the XDG_RUNTIME_DIR environment
-#  variable and therefore getting a different set of dconf
-#  settings.
+# The remaining development libraries and icon themes are Frama-C build
+# dependencies retained from the base toolchain image.
 RUN apt-get update && \
   apt-get install \
     adwaita-icon-theme-full \
@@ -227,8 +221,7 @@ RUN ln -s /home/dev/repos/tricera/tri && \
 ##
 # Stage 5 - Add AutoDeduct Frama-C plugins and CLI
 #
-# The V1 image packages the command-line pipeline only. GUI and LLM helpers
-# are intentionally outside this release profile.
+# The AutoDeduct 1.0 image packages the command-line pipeline.
 #
 FROM auto-deduct-tricera AS auto-deduct-runtime
 
@@ -263,9 +256,6 @@ RUN : "${ISP_REPO:?ISP_REPO must not be empty}" && \
   git rev-parse HEAD > REVISION && \
   dune build @install && \
   dune install
-
-RUN . /home/dev/.profile && \
-  git clone --depth 1 https://github.com/rse-verification/auto-deduct-examples.git
 
 # Install the command as `autodeduct` on the system PATH, including for
 # non-interactive `docker run IMAGE autodeduct ...` invocations.

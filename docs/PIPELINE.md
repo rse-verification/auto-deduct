@@ -52,6 +52,11 @@ A command exiting successfully is not enough by itself. AutoDeduct validates
 the generated artifacts, machine-readable contract report, and WP goal count.
 A WP run containing no goals is rejected.
 
+The default WP stage proves generated contract obligations only. It does not
+claim absence of runtime errors. With `--wp-rte`, WP also generates
+runtime-error obligations and every added goal must pass for AutoDeduct to
+return exit code `0`.
+
 ## Failure Flow
 
 An input, environment, parse, semantic inference, contract, timeout, or WP

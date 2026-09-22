@@ -58,6 +58,10 @@ versions, and generated proof obligations. It is not evidence that all C or
 ACSL language features are supported, or that every possible project using a
 similar pattern will verify.
 
+Unless `--wp-rte` is enabled, success does not establish absence of runtime
+errors. Enabling it adds WP runtime-error obligations, which must all be proved
+alongside the contract obligations.
+
 When qualifying a new program, retain `report.json` and the named stage logs.
 The public regression sources under `tests/cases/` document the expected
 outcomes exercised by the repository's integration suite.

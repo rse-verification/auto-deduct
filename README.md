@@ -37,6 +37,11 @@ successful result still requires all mandatory stages, complete
 reachable-helper contract coverage, and all WP goals to pass. See
 [Pipeline and diagnostics](docs/PIPELINE.md) for the status rules.
 
+By default, WP checks the generated contract obligations but does not add
+runtime-error obligations. Use `--wp-rte` when the verification scope must also
+cover runtime errors such as invalid memory accesses and arithmetic overflow;
+success then requires every added RTE goal to be proved as well.
+
 ## Quick Start With Docker
 
 ```shell
@@ -82,7 +87,8 @@ autodeduct \
 
 `examples/ase-2024/` contains the public steering-system example associated
 with the ASE 2024 paper *An Exercise in Mind Reading: Automatic Contract
-Inference for Frama-C*. It is copied from the public
+Inference for Frama-C*. The example is shipped directly in this repository and
+was originally copied from the public
 [auto-deduct-examples](https://github.com/rse-verification/auto-deduct-examples/tree/main/ase-2024)
 repository with attribution. It contains no Scania or private case-study code.
 See [the example README](examples/ase-2024/README.md) for provenance and its
