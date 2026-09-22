@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Run the AutoDeduct V1 Saida/TriCera/ISP/Eva/WP pipeline.
 
 The runner deliberately keeps generated files in a separate output directory.
@@ -13,7 +12,7 @@ The implementation is split by concern:
 - `pipeline`: stage orchestration and the CLI entry point.
 
 This module re-exports their public names so existing callers and tests can
-keep using `autodeduct_pipeline.<name>`.
+keep using `autodeduct_pipeline.<name>`. Use `bin/autodeduct` to run the CLI.
 """
 
 from __future__ import annotations
@@ -115,6 +114,3 @@ __all__ = [
     "validate_output_directory",
     "write_text",
 ]
-
-if __name__ == "__main__":
-    raise SystemExit(main())
