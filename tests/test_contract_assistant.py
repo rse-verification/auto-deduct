@@ -70,6 +70,7 @@ class ContractAssistantTests(TestCase):
             )
             (root / "main.c").write_text(
                 """int value;
+void helper(int *p);
 /*@
   ensures value >= 0;
 */
@@ -299,6 +300,7 @@ int main(void) {
             {
                 "filename": "src/main.c",
                 "code": """int value;
+void helper(int *p);
 /*@
   ensures value >= 0;
 */
@@ -332,6 +334,7 @@ int main(void) {
             )
             (root / "main.c").write_text(
                 """int value;
+void helper(int *p);
 /*@
   ensures value >= 0;
 */
@@ -429,6 +432,7 @@ int main(void) {
             copy.mkdir()
             helper = "void helper(int *p) { *p = *p + 1; }\n"
             main_source = """int value;
+void helper(int *p);
 /*@
   ensures value >= 0;
 */

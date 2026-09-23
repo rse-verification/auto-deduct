@@ -26,18 +26,21 @@
 #
 FROM ubuntu:24.04 AS auto-deduct-base
 
-ARG CERT="./cert/scania-it-tls-inspect-root.crt"
+ARG CERT="./Dockerfiles/cert/scania-it-tls-inspect-root.crt"
 ARG CERT_LOC="/usr/local/share/ca-certificates/"
 
 ARG PROXY_HOST=""
 ARG PROXY_PORT=""
 
-ARG FRAMA_C_VER="31.0"
-ARG SAIDA_VER="v0.5.0"
-ARG ISP_VER="v0.3.1"
-# ARG TRICERA_VER="v0.4"
-# This is a workaround until TriCera gets more regular releases.
-ARG TRICERA_VER="5324b60f43e3e90314a151d056e5559a0ec3d63e"
+ARG FRAMA_C_VER="33.0"
+ARG OCAML_VER="5.4.0"
+ARG SAIDA_REPO="https://github.com/rse-verification/saida.git"
+ARG SAIDA_VER="v0.6.0"
+ARG ISP_REPO="https://github.com/rse-verification/interface-specification-propagator.git"
+# ISP v0.4.0 contains the Frama-C 33 compatibility and CDL-2651 fixes.
+ARG ISP_VER="v0.4.0"
+ARG TRICERA_REPO="https://github.com/uuverifiers/tricera.git"
+ARG TRICERA_VER="v0.5"
 
 # This is the user id of "dev" user that will be created in the container
 ARG UID="2000"
@@ -47,20 +50,15 @@ ARG UID="2000"
 # ca-certificates - trusted certificates management (see below)
 # curl - to download coursier (Scala install tool)
 # cvc4 - SMT solver for use by Frama-C
-# ocaml - used by Frama-C plugins
+# ocaml - bootstrap compiler used to install the pinned opam compiler
 # opam - ocaml package manager
 # openjdk - used by Scala
+# python3 - AutoDeduct command-line runner
 # Z3 - SMT solver for use by Frama-C
 # + a bunch of other libraries required by Frama-C
 #
-# Note: We install two different icon themes. For some reason,
-#  when running GTK-applications, like Frama-C GUI, inside a
-#  devcontainer in Visual Studio Code the system is using one
-#  setup, and when running from a docker container directly,
-#  it is using another setup. It seems to have to do with
-#  Visual Studio Code setting up the XDG_RUNTIME_DIR environment
-#  variable and therefore getting a different set of dconf
-#  settings.
+# The remaining development libraries and icon themes are Frama-C build
+# dependencies retained from the base toolchain image.
 RUN apt-get update && \
   apt-get install \
     adwaita-icon-theme-full \
@@ -113,6 +111,10 @@ RUN  adduser --disabled-password --shell /usr/bin/bash --uid ${UID} --gecos "Dev
 USER dev
 WORKDIR /home/dev
 
+# Create later work directories as the unprivileged build user. Docker-created
+# WORKDIR paths can otherwise be root-owned on some builders.
+RUN mkdir -p /home/dev/repos /home/dev/.local/bin
+
 # Fix "less" charset settings.
 RUN echo "export LESSCHARSET=utf-8" >> .profile
 
@@ -136,18 +138,24 @@ EOF
 #
 FROM auto-deduct-base AS auto-deduct-frama-c
 
-ARG FRAMA_C_VER="31.0"
+# Import the top-level values so the selected toolchain versions reach opam.
+ARG FRAMA_C_VER
+ARG OCAML_VER
 
 USER dev
 WORKDIR /home/dev
 
-RUN opam init --disable-sandboxing --yes && \
-  opam init --shell-setup && \
+RUN : "${FRAMA_C_VER:?FRAMA_C_VER must not be empty}" && \
+  : "${OCAML_VER:?OCAML_VER must not be empty}" && \
+  opam init --bare --disable-sandboxing --yes && \
+  opam switch create default "ocaml-base-compiler.${OCAML_VER}" --yes && \
+  eval "$(opam env --switch=default --set-switch)" && \
   opam install "frama-c.${FRAMA_C_VER}" --yes && \
   opam install ocaml-lsp-server --yes && \
   opam install ocamlformat --yes && \
+  opam env --switch=default --set-switch >> /home/dev/.profile && \
   opam clean && \
-  eval $(opam env)
+  ocamlc -version
 
 # Add Frama-C auto-completion for bash
 RUN . /home/dev/.profile && \
@@ -162,13 +170,14 @@ FROM auto-deduct-frama-c AS auto-deduct-scala
 
 ARG PROXY_HOST=""
 ARG PROXY_PORT=""
+ARG COURSIER_VER="v2.1.24"
 
 USER dev
 WORKDIR /home/dev
 
 # NOTE: For some reason JAVA needs to be told that it is working
 #   behind a proxy.
-RUN curl -fLo coursierLauncher https://github.com/coursier/launchers/raw/master/coursier && \
+RUN curl -fLo coursierLauncher "https://github.com/coursier/coursier/releases/download/${COURSIER_VER}/coursier" && \
   if [ "${PROXY_HOST}" != "" -a "${PROXY_PORT}" != "" ]; then \
     java -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT} -jar coursierLauncher setup --yes; \
   else \
@@ -187,15 +196,20 @@ RUN curl -fLo coursierLauncher https://github.com/coursier/launchers/raw/master/
 #
 FROM auto-deduct-scala AS auto-deduct-tricera
 
-ARG TRICERA_VER="5324b60f43e3e90314a151d056e5559a0ec3d63e"
+# Import the top-level TriCera ref selected for this image.
+ARG TRICERA_VER
 
 USER dev
 WORKDIR /home/dev/repos
 
-RUN . /home/dev/.profile && \
-  git clone https://github.com/uuverifiers/tricera.git && \
+RUN : "${TRICERA_REPO:?TRICERA_REPO must not be empty}" && \
+  : "${TRICERA_VER:?TRICERA_VER must not be empty}" && \
+  . /home/dev/.profile && \
+  git clone --depth 1 --no-checkout "${TRICERA_REPO}" tricera && \
   cd tricera && \
-  git checkout "${TRICERA_VER}" && \
+  git fetch --depth 1 origin "${TRICERA_VER}" && \
+  git checkout --detach FETCH_HEAD && \
+  git rev-parse HEAD > REVISION && \
   sed -i -e "s/1.4.0/1.9.8/" project/build.properties && \
   sbt assembly
 
@@ -205,44 +219,52 @@ RUN ln -s /home/dev/repos/tricera/tri && \
   ln -s /home/dev/repos/tricera/tri-client
 
 ##
-# Stage 5 - Add AutoDeduct Frama-C plugins
+# Stage 5 - Add AutoDeduct Frama-C plugins and CLI
 #
-# NOTE: ISP (Interface Specification Propagator) is currently a
-#   private GitHub project. You will have to download and install
-#   it after the container image has been built.
+# The AutoDeduct 1.0 image packages the command-line pipeline.
 #
-FROM auto-deduct-tricera AS auto-deduct-toolchain
+FROM auto-deduct-tricera AS auto-deduct-runtime
 
-ARG SAIDA_VER="v0.5.0"
-ARG ISP_VER="v0.3.1"
+# Import the top-level Saida ref selected for this image.
+ARG SAIDA_VER
+# Import the top-level value instead of redeclaring a stage-specific default.
+# The CLI requires ISP v0.4.0 or newer for its machine-readable helper report.
+ARG ISP_VER
 
 USER dev
 WORKDIR /home/dev/repos
 
-RUN . /home/dev/.profile && \
-  git clone --depth 1 --branch "${SAIDA_VER}" https://github.com/rse-verification/saida.git && \
+RUN : "${SAIDA_REPO:?SAIDA_REPO must not be empty}" && \
+  : "${SAIDA_VER:?SAIDA_VER must not be empty}" && \
+  . /home/dev/.profile && \
+  git clone --depth 1 --no-checkout "${SAIDA_REPO}" saida && \
   cd saida && \
+  git fetch --depth 1 origin "${SAIDA_VER}" && \
+  git checkout --detach FETCH_HEAD && \
+  git rev-parse HEAD > REVISION && \
   dune build @install && \
   dune install && \
   why3 config detect
 
-RUN . /home/dev/.profile && \
-  git clone --depth 1 --branch "${ISP_VER}" https://github.com/rse-verification/interface-specification-propagator.git && \
+RUN : "${ISP_REPO:?ISP_REPO must not be empty}" && \
+  : "${ISP_VER:?ISP_VER must not be empty}" && \
+  . /home/dev/.profile && \
+  git clone --depth 1 --no-checkout "${ISP_REPO}" interface-specification-propagator && \
   cd interface-specification-propagator && \
+  git fetch --depth 1 origin "${ISP_VER}" && \
+  git checkout --detach FETCH_HEAD && \
+  git rev-parse HEAD > REVISION && \
   dune build @install && \
   dune install
 
-RUN . /home/dev/.profile && \
-  git clone --depth 1 https://github.com/rse-verification/auto-deduct-examples.git
+# Install the command as `autodeduct` on the system PATH, including for
+# non-interactive `docker run IMAGE autodeduct ...` invocations.
+COPY --chmod=0755 bin/autodeduct /usr/local/bin/autodeduct
+COPY --chmod=0755 bin/autodeduct_pipeline /usr/local/bin/autodeduct_pipeline
 
-COPY --chmod=755 --chown=dev:dev bin/autodeduct-contract-assistant /home/dev/.local/bin/autodeduct-contract-assistant
-COPY --chmod=644 --chown=dev:dev bin/autodeduct_contract_assistant_*.py /home/dev/.local/bin/
-COPY --chmod=755 --chown=dev:dev bin/autodeduct-contract-assistant-gui /home/dev/.local/bin/autodeduct-contract-assistant-gui
+# Non-interactive `docker run IMAGE autodeduct ...` does not source .profile.
+ENV PATH="/home/dev/.local/bin:/home/dev/.opam/default/bin:${PATH}"
 
 WORKDIR /home/dev
 
-# Enable use of X-server on docker host
-# For use with WSLg and Windows 11 please see:
-# https://stackoverflow.com/questions/73092750/how-to-show-gui-apps-from-docker-desktop-container-on-windows-11
-ENV DISPLAY=host.docker.internal:0.0
 CMD ["/usr/bin/bash", "-l"]
