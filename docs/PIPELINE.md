@@ -5,6 +5,8 @@ C parser, call graph, abstract interpreter, or theorem prover itself.
 
 ## Stage Flow
 
+The following stages apply to the default deterministic mode.
+
 | Stage | Component | Responsibility | Main artifact |
 | --- | --- | --- | --- |
 | `parse` | Frama-C | Parse and type-check the selected C translation unit. | parse logs |
@@ -17,6 +19,13 @@ Saida is the Frama-C integration plugin that invokes TriCera. ISP consumes the
 annotated C output and uses Eva states to produce additional ACSL clauses. ISP
 also owns reachable-function and missing-contract semantics; AutoDeduct reads
 its JSON report rather than reimplementing the call graph.
+
+With `--mode llm`, `llm_workflow` invokes Codex with the configured SKILL.md
+and delegates generation, annotation, and verification to that skill's tools.
+`skill_verify` validates the returned WP evidence without rerunning WP.
+AutoDeduct checks source hashes, annotation-only changes, the requested
+verification options, and complete nonzero proof goals. Saida/TriCera,
+ISP/Eva, and ISP coverage checking are not run. See [LLM mode](USAGE.md#llm-mode).
 
 ## Status Model
 
@@ -40,13 +49,18 @@ program can still be completely verified.
 
 ## Acceptance Criteria
 
-AutoDeduct returns exit code `0` only when:
+In deterministic mode, AutoDeduct returns exit code `0` only when:
 
 1. the input and environment are valid;
 2. parsing succeeds;
 3. Saida/TriCera and ISP produce their expected generated files;
 4. ISP reports no reachable helper function with a missing contract; and
 5. WP reports proof goals and proves all of them.
+
+In LLM mode, the skill must finish and return source-matched contract JSON,
+annotation-only output, and a matching verifier report with all requested
+options and complete nonzero WP goals. The result does not include the
+deterministic mode's reachable-helper coverage guarantee.
 
 A command exiting successfully is not enough by itself. AutoDeduct validates
 the generated artifacts, machine-readable contract report, and WP goal count.
@@ -102,6 +116,8 @@ useful generated files are:
 
 Every report contains `schema_version`. AutoDeduct 1.0 writes schema version
 `1`; the separate `version` field identifies the AutoDeduct CLI release.
+AutoDeduct 1.1 adds `mode` to schema version `1`; consumers of earlier reports
+may treat its absence as `deterministic`.
 
 Use `autodeduct --json ...` when another program or CI job needs the same
 result as machine-readable standard output.

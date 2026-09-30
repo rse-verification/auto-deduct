@@ -1,14 +1,21 @@
-# AutoDeduct 1.0 "Rubber Duck"
+# AutoDeduct 1.1 "Two Ducks" — release candidate
 
-AutoDeduct 1.0, codename "Rubber Duck", is a command-line
+AutoDeduct 1.1, proposed codename "Two Ducks", is a command-line
 formal-verification pipeline for C programs.
 It combines Frama-C, Saida, TriCera, ISP/Eva, and WP to infer contracts and
 auxiliary annotations, then checks whether the selected input can be proved.
+The default `--mode deterministic` retains that pipeline. The experimental
+`--mode llm` invokes a separately installed Codex skill for the entire
+generation and verification workflow, without Saida/TriCera, ISP/Eva,
+or the ISP reachable-helper check. AutoDeduct validates its proof report.
+See [LLM mode setup](docs/USAGE.md#llm-mode).
 
 AutoDeduct never changes the input source. Generated C files, diagnostics,
 logs, and the final JSON report are written to a separate output directory.
 
 ## Pipeline
+
+Default deterministic mode:
 
 ```text
 C source
@@ -33,8 +40,8 @@ console summary + report.json
 ```
 
 Warnings are retained in the result and normally allow later stages to run. A
-successful result still requires all mandatory stages, complete
-reachable-helper contract coverage, and all WP goals to pass. See
+successful result still requires all mandatory stages and all WP goals to pass.
+Deterministic mode also requires complete reachable-helper contract coverage. See
 [Pipeline and diagnostics](docs/PIPELINE.md) for the status rules.
 
 By default, WP checks the generated contract obligations but does not add

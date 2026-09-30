@@ -37,6 +37,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 "contract_report": None,
                 "errors": [],
                 "schema_version": 1,
+                "mode": "deterministic",
             },
         )
 
@@ -195,7 +196,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
 
             self.assertEqual(raised.exception.stage, "input")
             self.assertIn("exactly one C translation unit", raised.exception.message)
-            self.assertIn("Saida", raised.exception.message)
+            self.assertIn("provide one .c file", raised.exception.message)
 
     def test_directory_inputs_accept_uppercase_c_extension(self):
         with tempfile.TemporaryDirectory() as temp:

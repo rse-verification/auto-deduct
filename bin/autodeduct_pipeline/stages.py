@@ -34,6 +34,22 @@ IGNORED_SOURCE_DIRECTORIES = frozenset({
 })
 SUPPORTED_SOURCE_SUFFIXES = frozenset({".c"})
 GENERATED_OUTPUT_NAMES = frozenset({
+    "llm-task.json",
+    "llm-final.txt",
+    "llm-verification.json",
+    "llm_workflow.stdout.log",
+    "llm_workflow.stderr.log",
+    "skill_verify.stdout.log",
+    "skill_verify.stderr.log",
+    "inferred.wp-report.txt",
+    "inferred.wp-report.pdf",
+    "llm-contracts.json",
+    "llm-usage.json",
+    "llm-response.json",
+    "llm_generate.stdout.log",
+    "llm_generate.stderr.log",
+    "llm_annotate.stdout.log",
+    "llm_annotate.stderr.log",
     SAIDA_OUTPUT,
     ISP_OUTPUT,
     MISSING_CONTRACT_OUTPUT,

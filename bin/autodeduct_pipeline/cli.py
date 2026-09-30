@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 
 from .stages import PipelineError
 
-VERSION = "1.0.0"
+VERSION = "1.1.0-rc.1"
 
 PIPELINE_OWNED_OPTIONS = frozenset({
     "-main",
@@ -60,12 +61,21 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="autodeduct",
         description=(
-            "Run Saida/TriCera contract inference, ISP/Eva auxiliary "
-            "inference, and WP verification."
+            "Run deterministic contract inference and WP, or delegate generation "
+            "and verification to a configured Codex skill."
         ),
     )
     result.add_argument("--version", action="version", version=f"AutoDeduct {VERSION}")
     result.add_argument("--json", action="store_true", help="print the final report as JSON")
+    result.add_argument("--mode", choices=("deterministic", "llm"), default="deterministic")
+    result.add_argument(
+        "--llm-skill", default=os.environ.get("AUTODEDUCT_LLM_SKILL"),
+        metavar="SKILL_MD", help="local skill workflow (or AUTODEDUCT_LLM_SKILL)",
+    )
+    result.add_argument(
+        "--llm-runner", default=os.environ.get("AUTODEDUCT_LLM_RUNNER", "codex exec"),
+        metavar="COMMAND", help="Codex exec command (or AUTODEDUCT_LLM_RUNNER; default: codex exec)",
+    )
     result.add_argument(
         "--output-dir",
         default="autodeduct-output",
@@ -81,7 +91,7 @@ def parser() -> argparse.ArgumentParser:
         type=positive_timeout,
         default=300.0,
         help=(
-            "finite positive maximum seconds for each Frama-C stage "
+            "finite positive maximum seconds for each external stage "
             "(default: %(default)s)"
         ),
     )
