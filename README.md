@@ -1,6 +1,6 @@
-# AutoDeduct 1.1 "Two Ducks" — release candidate
+# AutoDeduct 1.1 "Double Ducks" — release candidate
 
-AutoDeduct 1.1, proposed codename "Two Ducks", is a command-line
+AutoDeduct 1.1, proposed codename "Double Ducks", is a command-line
 formal-verification pipeline for C programs.
 It combines Frama-C, Saida, TriCera, ISP/Eva, and WP to infer contracts and
 auxiliary annotations, then checks whether the selected input can be proved.
