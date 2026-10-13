@@ -53,7 +53,7 @@ success then requires every added RTE goal to be proved as well.
 ## Quick Start With Docker
 
 ```shell
-git clone --branch codex/llm-skill-mode https://github.com/rse-verification/auto-deduct.git
+git clone --branch llm-skill-mode https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 docker build -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
 docker run --rm \

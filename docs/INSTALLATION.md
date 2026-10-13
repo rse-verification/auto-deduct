@@ -10,7 +10,7 @@ Clone the repository and build from its root. The root is required because
 the Dockerfile copies the CLI from `bin/`.
 
 ```shell
-git clone --branch codex/llm-skill-mode https://github.com/rse-verification/auto-deduct.git
+git clone --branch llm-skill-mode https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 docker build \
   -t auto-deduct:1.0.0 \
@@ -118,9 +118,9 @@ not already installed.
 ## LOGOS for LLM Mode
 
 Repository: [rse-verification/logos](https://github.com/rse-verification/logos).
-Compatible integration revision: `008686e9f0dee3f174d10751a4c4053e7aa3772f`.
+Compatible integration revision: `851cd3a71dc265ebaeeffffa69c8f215fb2f47ff`.
 This revision adds the evidence/options interface required by AutoDeduct's
-`codex/llm-skill-mode` branch and rejects incomplete WP proofs. The earlier
+`llm-skill-mode` branch and rejects incomplete WP proofs. The earlier
 libclang-only fix does not implement that interface.
 
 Clone LOGOS alongside AutoDeduct using your normal GitHub authentication
@@ -129,7 +129,7 @@ Clone LOGOS alongside AutoDeduct using your normal GitHub authentication
 ```shell
 # From the AutoDeduct repository root:
 git clone https://github.com/rse-verification/logos.git ../logos
-git -C ../logos checkout 008686e9f0dee3f174d10751a4c4053e7aa3772f
+git -C ../logos checkout 851cd3a71dc265ebaeeffffa69c8f215fb2f47ff
 ```
 
 For native use, follow LOGOS's prerequisites, install/authenticate
