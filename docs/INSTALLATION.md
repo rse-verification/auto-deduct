@@ -118,7 +118,7 @@ not already installed.
 ## LOGOS for LLM Mode
 
 Repository: [rse-verification/logos](https://github.com/rse-verification/logos).
-Compatible integration revision: `851cd3a71dc265ebaeeffffa69c8f215fb2f47ff`.
+Compatible integration revision: `00251df7eb8e11aa7a0ef3747e57b647057868f2`.
 This revision adds the evidence/options interface required by AutoDeduct's
 `llm-skill-mode` branch and rejects incomplete WP proofs. The earlier
 libclang-only fix does not implement that interface.
@@ -129,7 +129,7 @@ Clone LOGOS alongside AutoDeduct using your normal GitHub authentication
 ```shell
 # From the AutoDeduct repository root:
 git clone https://github.com/rse-verification/logos.git ../logos
-git -C ../logos checkout 851cd3a71dc265ebaeeffffa69c8f215fb2f47ff
+git -C ../logos checkout 00251df7eb8e11aa7a0ef3747e57b647057868f2
 ```
 
 For native use, follow LOGOS's prerequisites, install/authenticate
