@@ -118,7 +118,7 @@ not already installed.
 ## LOGOS for LLM Mode
 
 Repository: [rse-verification/logos](https://github.com/rse-verification/logos).
-Compatible integration revision: `831256a5805ec714d4136c2ef7bfd2d088b4ab32`.
+Compatible integration revision: `0ac4a019d959460518c63282b82e0d83912e8dab`.
 This revision adds the evidence/options interface required by AutoDeduct's
 `codex/llm-skill-mode` branch and rejects incomplete WP proofs. The earlier
 libclang-only fix does not implement that interface.
@@ -129,7 +129,7 @@ Clone LOGOS alongside AutoDeduct using your normal GitHub authentication
 ```shell
 # From the AutoDeduct repository root:
 git clone https://github.com/rse-verification/logos.git ../logos
-git -C ../logos checkout 831256a5805ec714d4136c2ef7bfd2d088b4ab32
+git -C ../logos checkout 0ac4a019d959460518c63282b82e0d83912e8dab
 ```
 
 For native use, follow LOGOS's prerequisites, install/authenticate
@@ -151,7 +151,7 @@ docker build \
 
 Use Docker with BuildKit/named build context support. The named context is
 required and must point to the LOGOS repository root. Only `skill/` is copied
-to `/opt/logos/skill`; no Git credentials are passed to the build. Check out
+to `/opt/logos/skill`, including its GPL-2.0-only `LICENSE`; no Git credentials are passed to the build. Check out
 the chosen revision before building; `LOGOS_REV` records it as an image label
 and does not select the checkout for you.
 
