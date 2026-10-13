@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bin"))
 from autodeduct_pipeline import parser, run_pipeline, PipelineError
-from autodeduct_pipeline.llm import validate_annotation_only
+from autodeduct_pipeline.llm import validate_annotation_only, validate_llm_options
 
 SOURCE = "int helper(void)\n{\n    return 1;\n}\n/*@ ensures \\result == 1; */\nint main(void)\n{\n    return helper();\n}\n"
 ANNOTATED = "/*@ assigns \\nothing; ensures \\result == 1; */\n" + SOURCE
@@ -117,6 +117,23 @@ class LLMModeTests(unittest.TestCase):
             with self.assertRaises(PipelineError):
                 run_pipeline(args)
             self.assertEqual(skill.read_text(), "keep me")
+
+    def test_default_runner_is_allowed_when_cwd_is_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            skill = root / "SKILL.md"
+            skill.write_text("test skill")
+            output = root / "output"
+            output.mkdir()
+            args = parser().parse_args(["--mode", "llm", "--llm-skill", str(skill), "input.c"])
+            with patch("os.getcwd", return_value=str(output)):
+                validate_llm_options(args, output)
+            runner = output / "runner.py"
+            runner.write_text("keep me")
+            args.llm_runner = f"python3 {runner}"
+            with self.assertRaises(PipelineError):
+                validate_llm_options(args, output)
+            self.assertEqual(runner.read_text(), "keep me")
 
     def test_old_contracts_option_is_removed(self):
         with self.assertRaises(SystemExit):

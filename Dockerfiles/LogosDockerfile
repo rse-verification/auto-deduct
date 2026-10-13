@@ -6,7 +6,7 @@ ARG AUTODEDUCT_IMAGE=auto-deduct:latest
 FROM ${AUTODEDUCT_IMAGE}
 
 USER root
-ARG CODEX_VERSION=0.130.0
+ARG CODEX_VERSION=0.162.1
 ARG LOGOS_REV=local-checkout
 LABEL org.opencontainers.image.logos.source="https://github.com/rse-verification/logos" \
       org.opencontainers.image.logos.revision="${LOGOS_REV}"

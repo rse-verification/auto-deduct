@@ -155,13 +155,24 @@ to `/opt/logos/skill`, including its GPL-2.0-only `LICENSE`; no Git credentials 
 the chosen revision before building; `LOGOS_REV` records it as an image label
 and does not select the checkout for you.
 
-This layer installs libclang and Codex CLI `0.130.0` and sets
+This layer installs libclang and Codex CLI `0.162.1` and sets
 `AUTODEDUCT_LLM_SKILL=/opt/logos/skill/SKILL.md`. It also copies this checkout's
 AutoDeduct CLI. Override `AUTODEDUCT_IMAGE` to reuse a compatible toolchain
 image, or `CODEX_VERSION` to deliberately test another CLI version.
 On Apple Silicon, add `--platform linux/amd64` to all Docker build/run commands.
 
 ### Authenticate and run
+
+Check that the host permits Codex's Linux sandbox before starting a model run:
+
+```shell
+docker run --rm auto-deduct:logos codex sandbox linux -- /bin/true
+```
+
+This makes no model call. If it fails with a `bwrap` namespace-permission error,
+the Docker host's namespace/security policy is incompatible with the sandbox.
+Resolve that runtime configuration before running LLM mode; a successful image
+build or fixed-contract test does not establish sandbox compatibility.
 
 Keep Codex login state in a runtime volume, outside the image:
 

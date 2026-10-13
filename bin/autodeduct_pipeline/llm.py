@@ -27,6 +27,9 @@ def validate_llm_options(args, output_dir):
     if not args.llm_skill or not Path(args.llm_skill).expanduser().is_file():
         raise PipelineError("input", "set --llm-skill or AUTODEDUCT_LLM_SKILL to an installed SKILL.md")
     for word in [str(Path(args.llm_skill).expanduser().resolve()), *command_words(args.llm_runner)]:
+        # Bare command names and CLI arguments are not files in the current directory.
+        if not Path(word).expanduser().is_file():
+            continue
         path = Path(word).expanduser().resolve()
         if path == output_dir or output_dir in path.parents:
             raise PipelineError("input", "skill and runner files must be outside the output directory")
