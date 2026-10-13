@@ -222,6 +222,7 @@ RUN ln -s /home/dev/repos/tricera/tri && \
 # Stage 5 - Add AutoDeduct Frama-C plugins and CLI
 #
 # The AutoDeduct 1.0 image packages the command-line pipeline.
+# To add LOGOS and its LLM runtime, build Dockerfiles/LogosDockerfile on this image.
 #
 FROM auto-deduct-tricera AS auto-deduct-runtime
 

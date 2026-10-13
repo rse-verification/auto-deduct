@@ -5,7 +5,8 @@ formal-verification pipeline for C programs.
 It combines Frama-C, Saida, TriCera, ISP/Eva, and WP to infer contracts and
 auxiliary annotations, then checks whether the selected input can be proved.
 The default `--mode deterministic` retains that pipeline. The experimental
-`--mode llm` invokes a separately installed Codex skill for the entire
+`--mode llm` uses [LOGOS: LLM-Based Generation of Function Contracts for C](https://github.com/rse-verification/logos)
+through its Codex skill for the entire
 generation and verification workflow, without Saida/TriCera, ISP/Eva,
 or the ISP reachable-helper check. AutoDeduct validates its proof report.
 See [LLM mode setup](docs/USAGE.md#llm-mode).
@@ -52,7 +53,7 @@ success then requires every added RTE goal to be proved as well.
 ## Quick Start With Docker
 
 ```shell
-git clone https://github.com/rse-verification/auto-deduct.git
+git clone --branch codex/llm-skill-mode https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 docker build -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
 docker run --rm \
@@ -63,6 +64,32 @@ docker run --rm \
 ```
 
 On Apple Silicon, add `--platform linux/amd64` to both Docker commands.
+
+## LLM Mode With LOGOS
+
+LOGOS supplies the skill, contract renderer, and Frama-C WP evidence wrapper.
+AutoDeduct supplies the task and validates the generated artifacts and proof
+evidence. Use a LOGOS revision supporting `--verification-json` and repeated
+`--frama-c-option` arguments; earlier revisions are incompatible.
+
+The optional `Dockerfiles/LogosDockerfile` adds the LOGOS skill, libclang,
+and a pinned Codex CLI to the standard image. It accepts your local LOGOS
+checkout as a Docker named build context, so private Git credentials stay
+outside the image. See [LOGOS installation and Docker setup](docs/INSTALLATION.md#logos-for-llm-mode)
+for the compatible revision, build commands, and runtime login.
+
+For an existing native installation:
+
+```shell
+export AUTODEDUCT_LLM_SKILL="/absolute/path/to/logos/skill/SKILL.md"
+./bin/autodeduct --mode llm --timeout 1200 \
+  --output-dir /tmp/logos-proof src/main.c
+```
+
+The full skill directory must be readable; global skill registration is not
+required. LOGOS currently expects existing ACSL in the input and generates
+function contracts. This mode does not infer loop invariants through ISP/Eva
+or provide the deterministic pipeline's reachable-helper coverage check.
 
 ## Quick Start Without Docker
 

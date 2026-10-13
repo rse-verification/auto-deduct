@@ -10,7 +10,7 @@ Clone the repository and build from its root. The root is required because
 the Dockerfile copies the CLI from `bin/`.
 
 ```shell
-git clone https://github.com/rse-verification/auto-deduct.git
+git clone --branch codex/llm-skill-mode https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 docker build \
   -t auto-deduct:1.0.0 \
@@ -114,3 +114,96 @@ autodeduct --version
 
 Docker remains the reproducible option when compatible host components are
 not already installed.
+
+## LOGOS for LLM Mode
+
+Repository: [rse-verification/logos](https://github.com/rse-verification/logos).
+Compatible integration revision: `831256a5805ec714d4136c2ef7bfd2d088b4ab32`.
+This revision adds the evidence/options interface required by AutoDeduct's
+`codex/llm-skill-mode` branch and rejects incomplete WP proofs. The earlier
+libclang-only fix does not implement that interface.
+
+Clone LOGOS alongside AutoDeduct using your normal GitHub authentication
+(repository access is required while LOGOS is private):
+
+```shell
+# From the AutoDeduct repository root:
+git clone https://github.com/rse-verification/logos.git ../logos
+git -C ../logos checkout 831256a5805ec714d4136c2ef7bfd2d088b4ab32
+```
+
+For native use, follow LOGOS's prerequisites, install/authenticate
+[Codex CLI](https://learn.chatgpt.com/docs/cli), and set
+`AUTODEDUCT_LLM_SKILL` to the absolute path of `../logos/skill/SKILL.md`.
+No global skill registration is required. The whole skill directory and its
+scripts must be readable by the runner.
+
+### Build the LOGOS Docker image
+
+Build the standard `auto-deduct:latest` image first, as above. Then:
+
+```shell
+docker build \
+  --build-context logos=../logos \
+  --build-arg LOGOS_REV="$(git -C ../logos rev-parse HEAD)" \
+  -t auto-deduct:logos -f Dockerfiles/LogosDockerfile .
+```
+
+Use Docker with BuildKit/named build context support. The named context is
+required and must point to the LOGOS repository root. Only `skill/` is copied
+to `/opt/logos/skill`; no Git credentials are passed to the build. Check out
+the chosen revision before building; `LOGOS_REV` records it as an image label
+and does not select the checkout for you.
+
+This layer installs libclang and Codex CLI `0.130.0` and sets
+`AUTODEDUCT_LLM_SKILL=/opt/logos/skill/SKILL.md`. It also copies this checkout's
+AutoDeduct CLI. Override `AUTODEDUCT_IMAGE` to reuse a compatible toolchain
+image, or `CODEX_VERSION` to deliberately test another CLI version.
+On Apple Silicon, add `--platform linux/amd64` to all Docker build/run commands.
+
+### Authenticate and run
+
+Keep Codex login state in a runtime volume, outside the image:
+
+```shell
+docker volume create logos-codex
+docker run --rm -it -v logos-codex:/home/dev/.codex \
+  auto-deduct:logos codex login --device-auth
+```
+
+Device login must be enabled for the account/workspace. Other supported login
+methods are described in the [official authentication documentation](https://learn.chatgpt.com/docs/auth).
+No model credentials are stored in the Dockerfile.
+
+```shell
+docker run --rm \
+  -v logos-codex:/home/dev/.codex \
+  -v "$PWD":/work:ro -w /work \
+  -v "$PWD/../logos-proof":/output \
+  auto-deduct:logos autodeduct --mode llm --timeout 1200 \
+  --output-dir /output --wp-rte tests/fixtures/v1_smoke.c
+```
+
+Create `../logos-proof` first and make it writable by the container's `dev`
+user (UID 2000 by default). Use a separate output directory, outside the
+mounted source tree. The Codex runner retains its workspace-write sandbox;
+the container host must support it. Authentication, model access, and sandbox
+permissions are runtime prerequisites; failures are reported rather than
+bypassed. The fixed-contract integration test below does not test live model
+access or the Codex sandbox.
+
+### Check the LOGOS/WP interface without a model call
+
+```shell
+docker run --rm \
+  -v "$PWD":/work:ro -w /work \
+  -e AUTODEDUCT_LOGOS_ROOT=/opt/logos \
+  auto-deduct:logos python3 -m unittest discover -s tests \
+  -p test_logos_integration.py -v
+```
+
+This uses a test-only fixed contract runner with the real LOGOS wrapper and
+Frama-C WP. It checks the requested proof options, evidence hash, source
+preservation, successful proof acceptance, and rejection of an incomplete
+proof despite Frama-C returning zero. It does not call an LLM or run the
+Saida/ISP inference stages.
