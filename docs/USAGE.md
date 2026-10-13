@@ -30,14 +30,15 @@ arguments.
 
 ## LLM Mode
 
-This is an experimental integration, not a bundled or turnkey LLM verifier.
-The provider must implement the evidence interface below and have its parser
-and verification dependencies configured before use.
+This experimental mode delegates generation and verification to
+[LOGOS](https://github.com/rse-verification/logos). Use the compatible revision
+and native or Docker setup in [Installation](INSTALLATION.md#logos-for-llm-mode).
+LOGOS implements the evidence interface below.
 
-Configure the installed private skill once:
+Configure the local LOGOS skill once (the LOGOS Docker image sets this automatically):
 
 ```shell
-export AUTODEDUCT_LLM_SKILL=/opt/contract-provider/skill/SKILL.md
+export AUTODEDUCT_LLM_SKILL=/absolute/path/to/logos/skill/SKILL.md
 autodeduct --mode llm --timeout 1200 --output-dir /tmp/proof-run src/main.c
 ```
 
@@ -52,9 +53,11 @@ execution, and its text/PDF reports. AutoDeduct does not run a second WP pass,
 Saida/TriCera, or ISP/Eva in this mode. Contract JSON is an internal artifact;
 there is no public `--contracts` option.
 
-Install and authenticate Codex CLI separately, and make the private skill and
-its verification dependencies available in the runner's environment. Public
-AutoDeduct neither clones the private repository nor bundles its contents.
+Native runs require an installed, authenticated Codex CLI, Python, libclang,
+Frama-C WP, and configured provers. The optional LOGOS Docker image bundles
+the runtime dependencies and skill from a local checkout; authenticate Codex
+at runtime. The complete skill directory must be readable by the runner;
+global skill installation is unnecessary because AutoDeduct supplies its path.
 Running LLM mode gives the configured Codex model access to the skill and
 input source. Use an account/environment approved for those files.
 
@@ -94,9 +97,10 @@ from its verifier process (not from the model's final message):
 ```
 
 The command must contain all requested options in order. Extra provider
-fields are allowed. The private integration patch adds these CLI/report
-options and makes incomplete or zero-goal verification return failure.
-An older provider without that patch fails explicitly.
+fields are allowed. LOGOS records the actual process exit code in `returncode`
+and the proof outcome in `verified`. Its wrapper returns nonzero for incomplete,
+missing, or zero-goal summaries, even when Frama-C itself exits zero.
+Older LOGOS revisions without these CLI/report options are incompatible.
 
 AutoDeduct records `llm_workflow` (the skill execution) and
 `skill_verify` (inspection of its evidence, not another proof run).
@@ -113,9 +117,9 @@ extracted verifier logs, and AutoDeduct's `report.json`.
 The report records `mode: "llm"` and `contract_report: null`.
 The output directory must be separate from the input source and skill files.
 
-The example private skill currently requires existing ACSL in its input.
-Its parser depends on libclang; the fallback misses some function forms,
-including the tested `static inline` case. Forwarded include/macro options
+LOGOS currently requires existing ACSL in its input.
+Its parser requires libclang and reports a dependency error if it cannot load it.
+Forwarded include/macro options
 apply to verification, not automatically to its annotation parser.
 Existing specifications are preserved, and only ACSL block insertions
 between original source lines are accepted. Loops may need explicit
