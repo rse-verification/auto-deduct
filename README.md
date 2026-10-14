@@ -52,6 +52,7 @@ From an AutoDeduct checkout with the selected dependencies configured:
 
 # Host Codex and LOGOS verification in the prepared Docker image:
 ./bin/autodeduct llm --llm-runtime docker \
+  --llm-docker-image auto-deduct:latest \
   --output-dir /tmp/llm-proof path/to/program.c
 ```
 
@@ -59,7 +60,11 @@ A separate AutoDeduct package installation is unnecessary. Use `./bin/autodeduct
 directly or add the checkout's `bin/` directory to `PATH`; see
 [host launcher setup](docs/INSTALLATION.md#host-launcher).
 These examples require setup first. Docker mode does not install or build its
-image automatically. For larger LLM runs, see the timeout guidance in
+image automatically or pull it from a registry. `--llm-docker-image IMAGE`
+selects an existing local image by name and tag or image ID; its default is
+`auto-deduct:latest`. If you build with another name, pass that same name here;
+see the [custom image example](docs/LLM.md#choose-a-custom-image-name).
+For larger LLM runs, see the timeout guidance in
 [LLM usage](docs/LLM.md#run-with-docker-verification).
 The standard image includes LOGOS alongside Saida, ISP and TriCera. Docker LLM
 runs extract their skill from it; building or running that image requires no

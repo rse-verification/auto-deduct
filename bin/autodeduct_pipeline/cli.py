@@ -87,7 +87,7 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument(
         "--llm-docker-image", default="auto-deduct:latest", metavar="IMAGE",
-        help="LOGOS verifier image for --llm-runtime docker (default: %(default)s)",
+        help="existing local LOGOS verifier image name:tag or ID for --llm-runtime docker; no automatic build or pull (default: %(default)s)",
     )
     result.add_argument(
         "--llm-docker-platform", default="linux/amd64", metavar="PLATFORM",

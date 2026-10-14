@@ -76,6 +76,15 @@ and proof assumptions, and [limitations](LIMITATIONS.md) for unsupported inputs.
 
 See the dedicated [LLM setup and usage guide](LLM.md).
 
+| Option | Purpose |
+| --- | --- |
+| `--llm-runtime local\|docker` | Where the LOGOS wrapper verifies; default `local`, with Codex on the host in both cases |
+| `--llm-docker-image IMAGE` | Existing local verifier image name:tag or ID; default `auto-deduct:latest`; no automatic build or pull |
+| `--llm-docker-platform PLATFORM` | Verifier architecture; default `linux/amd64` |
+
+If you build with a custom image name, pass that name to the launcher. See
+the [matching build and run commands](LLM.md#choose-a-custom-image-name).
+
 ## Docker
 
 See [deductive Docker usage](DEDUCTIVE.md#run-in-docker) or

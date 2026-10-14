@@ -92,6 +92,7 @@ prepared image available locally:
 
 ```shell
 autodeduct llm --llm-runtime docker --timeout 1200 \
+  --llm-docker-image auto-deduct:latest \
   --output-dir /tmp/llm-docker-proof --wp-rte path/to/program.c
 ```
 
@@ -125,6 +126,26 @@ referenced through raw Frama-C options must be under source/`--include` roots.
 sets each prover's timeout. Larger inputs may need more than the default
 300-second stage limit. Incomplete or zero-goal proofs fail; extending the time
 limit does not make a failed proof successful by itself.
+
+### Choose a custom image name
+
+The launcher uses an image already available in the local Docker daemon. It
+does not build or pull images automatically. Build or load the image first,
+then pass the same name and tag with `--llm-docker-image`:
+
+```shell
+# From the AutoDeduct checkout; on Apple Silicon add --platform linux/amd64.
+docker build -t my-autodeduct:llm \
+  -f Dockerfiles/AutoDeductDockerfile .
+
+autodeduct llm --llm-runtime docker \
+  --llm-docker-image my-autodeduct:llm \
+  --timeout 1200 --wp-rte \
+  --output-dir /tmp/llm-docker-proof path/to/program.c
+```
+
+Without this option, the launcher selects `auto-deduct:latest`. An image ID is
+also accepted. The selected image must contain LOGOS and its verifier toolchain.
 
 ## Why Codex stays on the host
 

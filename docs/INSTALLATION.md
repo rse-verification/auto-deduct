@@ -69,6 +69,12 @@ docker run --rm auto-deduct:latest python3 /opt/logos/skill/scripts/generate_acs
 The build fetches pinned component revisions directly from their public
 repositories. No separate LOGOS checkout or GitHub credentials are needed.
 
+You may choose another image name with `docker build -t NAME:TAG`. For LLM
+Docker runs, select it with `--llm-docker-image NAME:TAG`; for deductive Docker
+runs, use it as the image argument to `docker run`. LLM mode defaults to
+`auto-deduct:latest` and never builds or pulls the selected image automatically.
+See the [custom image example](LLM.md#choose-a-custom-image-name).
+
 ## Apple Silicon
 
 The current TriCera stack uses the `linux/amd64` architecture. Add the
