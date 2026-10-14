@@ -13,7 +13,9 @@ import os
 import signal
 import shlex
 import subprocess
+import tempfile
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -34,6 +36,8 @@ IGNORED_SOURCE_DIRECTORIES = frozenset({
 })
 SUPPORTED_SOURCE_SUFFIXES = frozenset({".c"})
 GENERATED_OUTPUT_NAMES = frozenset({
+    "logos_environment.stdout.log",
+    "logos_environment.stderr.log",
     "logos_verify.stdout.log",
     "logos_verify.stderr.log",
     "llm-task.json",
@@ -95,8 +99,53 @@ class StageResult:
 
 
 # Write generated content into the separate output directory without touching inputs.
-def write_text(path: Path, content: str) -> None:
-    path.write_text(content, encoding="utf-8", errors="replace")
+def write_text(path: Path, content: str, *, expected_parent: tuple[int, int] | None = None) -> None:
+    """Replace an artifact without following a generator-created symlink."""
+    path = path.absolute()
+    parent = path.parent
+    if parent.resolve() != parent:
+        raise OSError(f"output directory changed or contains a symlink: {parent}")
+    info = parent.stat()
+    identity = (info.st_dev, info.st_ino)
+    if expected_parent is not None and identity != expected_parent:
+        raise OSError(f"output directory changed while the stage was running: {parent}")
+    directory_fd = None
+    temporary = None
+    try:
+        if os.name == "posix":
+            directory_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            opened = os.fstat(directory_fd)
+            if (opened.st_dev, opened.st_ino) != identity:
+                raise OSError(f"output directory changed: {parent}")
+        if directory_fd is None:
+            fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=parent)
+        else:
+            temporary = f".{path.name}.{uuid.uuid4().hex}.tmp"
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                         0o600, dir_fd=directory_fd)
+        with os.fdopen(fd, "w", encoding="utf-8", errors="replace") as stream:
+            stream.write(content)
+        current = parent.stat()
+        if parent.resolve() != parent or (current.st_dev, current.st_ino) != identity:
+            raise OSError(f"output directory changed: {parent}")
+        if directory_fd is None:
+            os.replace(temporary, path)
+        else:
+            # Anchor both names to the original directory even if it is renamed.
+            os.replace(temporary, path.name,
+                       src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+        temporary = None
+    finally:
+        if temporary is not None:
+            try:
+                if directory_fd is None:
+                    os.unlink(temporary)
+                else:
+                    os.unlink(temporary, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
+        if directory_fd is not None:
+            os.close(directory_fd)
 
 
 def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
@@ -153,6 +202,9 @@ def run_stage(
     timeout: float,
     artifact: Path | None = None,
 ) -> StageResult:
+    output_dir = output_dir.resolve()
+    directory_info = output_dir.stat()
+    output_identity = (directory_info.st_dev, directory_info.st_ino)
     result = StageResult(
         name=name,
         description=description,
@@ -189,16 +241,16 @@ def run_stage(
             stdout = stdout.decode(errors="replace")
         if isinstance(stderr, bytes):
             stderr = stderr.decode(errors="replace")
-        write_text(output_dir / f"{name}.stdout.log", stdout)
-        write_text(output_dir / f"{name}.stderr.log", stderr)
+        write_text(output_dir / f"{name}.stdout.log", stdout, expected_parent=output_identity)
+        write_text(output_dir / f"{name}.stderr.log", stderr, expected_parent=output_identity)
         result.stdout_file = str(output_dir / f"{name}.stdout.log")
         result.stderr_file = str(output_dir / f"{name}.stderr.log")
         result.duration_seconds = time.monotonic() - started
         return result
 
     if completed is not None:
-        write_text(output_dir / f"{name}.stdout.log", completed.stdout)
-        write_text(output_dir / f"{name}.stderr.log", completed.stderr)
+        write_text(output_dir / f"{name}.stdout.log", completed.stdout, expected_parent=output_identity)
+        write_text(output_dir / f"{name}.stderr.log", completed.stderr, expected_parent=output_identity)
         result.returncode = completed.returncode
         result.status = "passed" if completed.returncode == 0 else "failed"
         if completed.returncode != 0:

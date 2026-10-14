@@ -13,7 +13,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 from .diagnostics import wp_diagnostic
-from .stages import PipelineError, SAIDA_OUTPUT, StageResult, command_options, run_stage
+from .stages import PipelineError, SAIDA_OUTPUT, StageResult, command_options, run_stage, write_text
 
 
 def command_words(value):
@@ -46,6 +46,9 @@ def validate_llm_options(args, output_dir):
         wrapper = Path(args.llm_skill).expanduser().resolve().parent / "scripts/generate_acsl.py"
         if not wrapper.is_file():
             raise PipelineError("input", f"LOGOS wrapper not found: {wrapper}")
+        runtime = wrapper.resolve().parent
+        if runtime == output_dir or runtime in output_dir.parents or output_dir in runtime.parents:
+            raise PipelineError("input", "LOGOS runtime files must be outside the output directory")
     else:
         if os.name != "posix":
             raise PipelineError("input", "Docker LLM mode requires POSIX host paths; use WSL on Windows")
@@ -67,8 +70,10 @@ def validate_mount_path(path):
         raise PipelineError("input", "Docker bind-mount paths cannot contain commas or newlines")
 
 
-def wrapper_command(args, source, output_dir, contracts, annotated, evidence_file, options):
-    wrapper_args = [str(source), "--contracts", str(contracts), "-o", str(annotated),
+def wrapper_command(args, source, output_dir, contracts, annotated, evidence_file, options,
+                    *, check_dependencies=False):
+    wrapper_args = ["--check-dependencies"] if check_dependencies else [
+                    str(source), "--contracts", str(contracts), "-o", str(annotated),
                     "--verify", "--verification-json", str(evidence_file),
                     *(f"--frama-c-option={value}" for value in options)]
     if args.llm_runtime == "local":
@@ -90,6 +95,24 @@ def wrapper_command(args, source, output_dir, contracts, annotated, evidence_fil
                 "--workdir", str(output_dir), args.llm_docker_image,
                 "python3", "/opt/logos/skill/scripts/generate_acsl.py", *wrapper_args]
     return command, name
+
+
+def run_logos_stage(*, container_name, report, **stage_options):
+    """Stop a failed or timed-out verifier container as well as its Docker client."""
+    result = None
+    try:
+        result = run_stage(**stage_options)
+        return result
+    finally:
+        if container_name and (result is None or result.status != "passed"):
+            try:
+                completed = subprocess.run(["docker", "rm", "--force", container_name],
+                                           capture_output=True, timeout=10, check=False)
+                # A --rm container that already finished needs no further cleanup.
+                if completed.returncode and "No such container" not in completed.stderr.decode(errors="replace"):
+                    report.errors.append({"stage": "cleanup", "message": f"could not confirm cleanup of container {container_name}"})
+            except (OSError, subprocess.TimeoutExpired):
+                report.errors.append({"stage": "cleanup", "message": f"could not confirm cleanup of container {container_name}"})
 
 
 def validate_contracts(path, source_text):
@@ -143,16 +166,29 @@ def run_skill_workflow(args, source, output_dir, report):
     options = [*command_options(args, [source]), *args.wp_option]
     if args.wp_rte:
         options.append("-wp-rte")
+    environment_command, environment_container = wrapper_command(
+        args, source, output_dir, contracts, annotated, evidence_file, options,
+        check_dependencies=True,
+    )
+    environment = run_logos_stage(
+        name="logos_environment", description=f"Check LOGOS verification dependencies ({args.llm_runtime})",
+        command=environment_command, cwd=output_dir, output_dir=output_dir,
+        timeout=args.timeout, container_name=environment_container, report=report,
+    )
+    report.stages.append(environment)
+    if environment.status != "passed":
+        report.errors.append({"stage": "environment", "message": environment.error or "LOGOS verification dependencies are unavailable"})
+        return report
     command, container_name = wrapper_command(
         args, source, output_dir, contracts, annotated, evidence_file, options,
     )
     task_file = output_dir / "llm-task.json"
-    task_file.write_text(json.dumps({
+    write_text(task_file, json.dumps({
         "workflow": "generate-only",
         "skill": str(skill), "source": str(source),
         "contracts": str(contracts), "annotated_source": str(annotated),
         "verification_json": str(evidence_file), "verification_options": options,
-    }, indent=2) + "\n", encoding="utf-8")
+    }, indent=2) + "\n")
     prompt = (
         f"Use the skill at {json.dumps(str(skill))}. Read its complete SKILL.md and "
         f"follow its workflow on the task in {json.dumps(str(task_file))}. "
@@ -195,21 +231,12 @@ def run_skill_workflow(args, source, output_dir, report):
     except (OSError, ValueError) as error:
         report.errors.append({"stage": "llm_contracts", "message": str(error)})
         return report
-    wrapper = None
-    try:
-        wrapper = run_stage(
-            name="logos_verify", description=f"Annotate and verify with LOGOS ({args.llm_runtime})",
-            command=command, cwd=output_dir, output_dir=output_dir,
-            timeout=args.timeout, artifact=evidence_file,
-        )
-    finally:
-        if container_name and (wrapper is None or wrapper.status != "passed"):
-            # Killing a Docker client does not necessarily stop its container.
-            try:
-                subprocess.run(["docker", "rm", "--force", container_name],
-                               capture_output=True, timeout=10, check=False)
-            except (OSError, subprocess.TimeoutExpired):
-                report.errors.append({"stage": "cleanup", "message": f"could not confirm cleanup of container {container_name}"})
+    wrapper = run_logos_stage(
+        name="logos_verify", description=f"Annotate and verify with LOGOS ({args.llm_runtime})",
+        command=command, cwd=output_dir, output_dir=output_dir,
+        timeout=args.timeout, artifact=evidence_file,
+        container_name=container_name, report=report,
+    )
     report.stages.append(wrapper)
     if wrapper.status != "passed" and not evidence_file.is_file():
         report.errors.append({"stage": wrapper.name, "message": wrapper.error or "LOGOS wrapper failed"})
@@ -240,7 +267,7 @@ def run_skill_workflow(args, source, output_dir, report):
             if not isinstance(evidence.get(stream), str):
                 raise ValueError(f"verification report must contain {stream}")
             path = output_dir / f"skill_verify.{stream}.log"
-            path.write_text(evidence[stream], encoding="utf-8")
+            write_text(path, evidence[stream])
             setattr(verification, f"{stream}_file", str(path))
         if verification.returncode != 0:
             raise ValueError(f"skill verifier exited with status {verification.returncode}")

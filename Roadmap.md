@@ -23,6 +23,20 @@ This is a living document describing the target for each AutoDeduct release.
   otherwise it returns `FAILED` with stage-specific diagnostics.
 - The input source remains unchanged.
 
+## AutoDeduct 1.1 “Double Ducks” — release candidate
+
+- Add explicit `deductive` and `llm` mode commands while keeping existing flags.
+- Use host Codex/LOGOS for contract generation, followed by launcher-owned
+  annotation and WP evidence validation.
+- Offer local verification and optional Docker verification without container
+  Codex or model credentials in the verifier image.
+- Keep setup, mode-specific usage, common CLI reference and limitations in
+  separate [documentation guides](docs/README.md).
+
+Complete native host verification and native Windows Frama-C qualification
+remain open. The LLM workflow remains experimental and does not provide the
+traditional ISP helper-coverage check.
+
 ## Future Releases
 
 - Broaden the supported C and ACSL subsets based on reviewed use cases.

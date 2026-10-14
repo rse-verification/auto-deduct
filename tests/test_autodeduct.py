@@ -757,6 +757,94 @@ class AutoDeductPipelineTests(unittest.TestCase):
             self.assertEqual(result.status, "failed")
             self.assertIn("missing header", result.error)
 
+    @unittest.skipUnless(MODULE.os.name == "posix", "requires ordinary symlink creation")
+    def test_stage_logs_do_not_follow_generator_created_symlinks(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            output = root / "output"
+            output.mkdir()
+            original = root / "outside.txt"
+            original.write_text("keep user data")
+            script = (
+                "from pathlib import Path\n"
+                f"Path('llm_workflow.stdout.log').symlink_to({str(original)!r})\n"
+                "print('generated log')\n"
+            )
+            result = MODULE.run_stage(
+                name="llm_workflow", description="offline generator",
+                command=[sys.executable, "-c", script], cwd=output,
+                output_dir=output, timeout=10,
+            )
+            self.assertEqual(result.status, "passed")
+            self.assertEqual(original.read_text(), "keep user data")
+            self.assertFalse((output / "llm_workflow.stdout.log").is_symlink())
+            self.assertEqual((output / "llm_workflow.stdout.log").read_text(), "generated log\n")
+
+    @unittest.skipUnless(MODULE.os.name == "posix", "requires ordinary symlink creation")
+    def test_stage_rejects_replaced_output_directory(self):
+        for replace_with_symlink in (True, False):
+            with self.subTest(symlink=replace_with_symlink), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                output = root / "output"
+                output.mkdir()
+                victim = root / "victim"
+                victim.mkdir()
+                log = victim / "llm_workflow.stdout.log"
+                log.write_text("keep user data")
+                replacement = (f"Path({str(output)!r}).symlink_to({str(victim)!r}, target_is_directory=True)" if replace_with_symlink
+                               else f"Path({str(victim)!r}).rename({str(output)!r})")
+                script = (
+                    "from pathlib import Path\n"
+                    f"Path({str(output)!r}).rename({str(root / 'saved-output')!r})\n"
+                    f"{replacement}\nprint('generated log')\n"
+                )
+                with self.assertRaisesRegex(OSError, "output directory changed"):
+                    MODULE.run_stage(
+                        name="llm_workflow", description="offline generator",
+                        command=[sys.executable, "-c", script], cwd=output,
+                        output_dir=output, timeout=10,
+                    )
+                retained = log if replace_with_symlink else output / log.name
+                self.assertEqual(retained.read_text(), "keep user data")
+
+    @unittest.skipUnless(MODULE.os.name == "posix", "requires ordinary symlink creation")
+    def test_report_does_not_follow_generator_created_symlink(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            original = root / "outside.txt"
+            original.write_text("keep user data")
+            output = root / "output"
+            output.mkdir()
+            (output / "report.json").symlink_to(original)
+            report = MODULE.PipelineReport(version="test", status="failed", input_files=[], output_directory=str(output))
+            MODULE.persist_report(report)
+            self.assertEqual(original.read_text(), "keep user data")
+            self.assertEqual(json.loads((output / "report.json").read_text())["status"], "failed")
+
+    @unittest.skipUnless(MODULE.os.name == "posix", "requires descriptor-relative file creation")
+    def test_atomic_writer_never_creates_a_temporary_file_in_swapped_parent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            output = root / "output"
+            output.mkdir()
+            victim = root / "victim"
+            victim.mkdir()
+            saved = root / "saved-output"
+            original_open = STAGES.os.open
+
+            def swap_after_directory_open(path, flags, *args, **kwargs):
+                fd = original_open(path, flags, *args, **kwargs)
+                if flags & STAGES.os.O_DIRECTORY:
+                    output.rename(saved)
+                    output.symlink_to(victim, target_is_directory=True)
+                return fd
+
+            with patch.object(STAGES.os, "open", side_effect=swap_after_directory_open):
+                with self.assertRaisesRegex(OSError, "output directory changed"):
+                    STAGES.write_text(output / "report.json", "private generated data")
+            self.assertEqual(list(victim.iterdir()), [])
+            self.assertEqual(list(saved.iterdir()), [])
+
     def test_stage_failure_uses_stdout_when_stderr_is_empty(self):
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp)

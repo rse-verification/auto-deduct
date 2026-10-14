@@ -1,13 +1,15 @@
-# AutoDeduct 1.0 "Rubber Duck" Limitations
+# Limitations
 
-AutoDeduct 1.0 "Rubber Duck" is a deterministic CLI pipeline. It does not modify source
-files or automatically accept generated contracts into the original project.
+[Documentation index](README.md) · [Deductive mode](DEDUCTIVE.md) · [LLM mode](LLM.md)
+
+AutoDeduct writes generated artifacts separately from the original source.
+Both workflows require review of the supplied specifications and assumptions.
 Its Saida, TriCera, and ISP components are experimental and retain their own
 language and inference boundaries.
 
 ## Supported Input Shape
 
-AutoDeduct 1.0 accepts one C translation unit plus its headers. Multiple `.c` inputs are
+The deductive workflow accepts one C translation unit plus its headers. Multiple `.c` inputs are
 rejected before analysis because Saida's current source merge is not
 file-aware.
 
@@ -16,15 +18,15 @@ behavior guards. General ACSL logic functions and predicates are outside this
 inference subset. Behavior-specific `assigns`, `complete`, and `disjoint`
 clauses are not treated as fully inferred and verified functional contracts.
 
-## Known Boundaries
+## Deductive inference boundaries
 
-| Boundary | AutoDeduct 1.0 behavior | Recommended workaround |
+| Boundary | The deductive workflow behavior | Recommended workaround |
 | --- | --- | --- |
 | Floating point | Functional inference fails when TriCera reports an unsupported floating-point type. An integer fallback is not accepted as equivalent semantics. | Use a reviewed fixed-point model or a toolchain that models the required IEEE behavior. |
 | Pointer arithmetic and unsupported lvalues | ISP reports `ISP-E005`; WP is not run on incomplete auxiliary inference. | Simplify the access pattern or provide reviewed validity, separation, frame, and value-relation ACSL. |
-| Nested pointers | May fail during functional inference, ISP, contract checking, or WP. AutoDeduct 1.0 does not infer a complete multi-level validity and aliasing model. | Flatten the interface where appropriate or write explicit contracts for every dereference level. |
+| Nested pointers | May fail during functional inference, ISP, contract checking, or WP. The deductive workflow does not infer a complete multi-level validity and aliasing model. | Flatten the interface where appropriate or write explicit contracts for every dereference level. |
 | Persistent local static state | WP may remain incomplete, but no component diagnostic identifies every occurrence. | Model persistent state explicitly and provide an accurate frame and state-transition contract. |
-| Loops | General loop-invariant inference is outside AutoDeduct 1.0. Missing or insufficient annotations leave WP goals unresolved. | Add reviewed `loop invariant`, `loop assigns`, and, where required, `loop variant` clauses. |
+| Loops | General loop-invariant inference is outside the deductive workflow. Missing or insufficient annotations leave WP goals unresolved. | Add reviewed `loop invariant`, `loop assigns`, and, where required, `loop variant` clauses. |
 
 ## ISP Aggregate and Index Boundaries
 
@@ -65,3 +67,19 @@ alongside the contract obligations.
 When qualifying a new program, retain `report.json` and the named stage logs.
 The public regression sources under `tests/cases/` document the expected
 outcomes exercised by the repository's integration suite.
+
+## LLM workflow boundaries
+
+- The current generation adapter requires authenticated host Codex; model APIs
+  and arbitrary agent CLIs are not interchangeable yet.
+- LOGOS requires existing ACSL, one C translation unit, and contracts for
+  undocumented functions. Its parser requires libclang.
+- Include/macro options configure Frama-C verification, not the annotation parser.
+  Project-specific parsing configurations may fail.
+- The workflow does not run ISP/Eva invariant inference or ISP helper coverage.
+- Codex inside Docker is unsupported. Docker verification is selected explicitly;
+  without Docker the complete local verification dependencies are required.
+- Full native Windows Frama-C verification and a complete native host installation
+  remain unqualified. Use WSL for a Linux toolchain on Windows.
+
+See [LLM usage](LLM.md) for runtime dependencies, reports and troubleshooting.

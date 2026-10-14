@@ -51,7 +51,7 @@ class LogosIntegrationTest(unittest.TestCase):
                 self.assertEqual(evidence["verified"], expected_result == 1)
                 self.assertEqual(evidence["source_sha256"], hashlib.sha256((output / "inferred.c").read_bytes()).hexdigest())
                 if expected_result == 1:
-                    self.assertEqual([stage.name for stage in report.stages], ["llm_workflow", "logos_verify", "skill_verify"])
+                    self.assertEqual([stage.name for stage in report.stages], ["logos_environment", "llm_workflow", "logos_verify", "skill_verify"])
                     self.assertEqual(report.stages[-1].status, "passed")
 
 
@@ -83,8 +83,8 @@ class LogosDockerIntegrationTest(unittest.TestCase):
                 evidence = json.loads((output / "llm-verification.json").read_text())
                 self.assertEqual(evidence["returncode"], 0)
                 self.assertEqual(evidence["verified"], expected_result == 1)
-                self.assertEqual(report.stages[1].command[:2], ["docker", "run"])
-                self.assertEqual(report.stages[1].returncode, 0 if expected_result == 1 else 1)
+                self.assertEqual(report.stages[2].command[:2], ["docker", "run"])
+                self.assertEqual(report.stages[2].returncode, 0 if expected_result == 1 else 1)
                 self.assertEqual(evidence["source_sha256"], hashlib.sha256((output / "inferred.c").read_bytes()).hexdigest())
 
 

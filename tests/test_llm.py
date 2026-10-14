@@ -45,6 +45,12 @@ class LLMModeTests(unittest.TestCase):
             commands = []
 
             def fake_run(command, **kwargs):
+                if "--check-dependencies" in command:
+                    if failure == "dependencies":
+                        return subprocess.CompletedProcess(command, 1, "", "Frama-C was not found in PATH; install Frama-C with WP")
+                    if failure == "preflight_timeout":
+                        raise subprocess.TimeoutExpired(command, 1)
+                    return subprocess.CompletedProcess(command, 0, "LOGOS verification dependencies are available", "")
                 commands.append(command)
                 task = json.loads((output / "llm-task.json").read_text())
                 self.assertEqual(task["workflow"], "generate-only")
@@ -67,6 +73,8 @@ class LLMModeTests(unittest.TestCase):
                         }))
                     if failure == "agent_evidence":
                         (output / "llm-verification.json").write_text("{}")
+                    if failure == "log_symlink":
+                        (output / "skill_verify.stdout.log").symlink_to(source)
                     return subprocess.CompletedProcess(command, 0, "generated contracts", "")
                 if runtime == "docker":
                     self.assertEqual(command[:2], ["docker", "run"])
@@ -77,7 +85,7 @@ class LLMModeTests(unittest.TestCase):
                     self.assertIn("/opt/logos/skill/scripts/generate_acsl.py", command)
                     self.assertNotIn("--privileged", command)
                     self.assertFalse(any(".codex" in word or "docker.sock" in word for word in command))
-                    if failure == "timeout":
+                    if failure in {"timeout", "cleanup_failure"}:
                         raise subprocess.TimeoutExpired(command, 1)
                 else:
                     self.assertEqual(command[:2], [sys.executable, str(root / "scripts/generate_acsl.py")])
@@ -107,13 +115,18 @@ class LLMModeTests(unittest.TestCase):
             ), patch(
                 "autodeduct_pipeline.stages._run_command", side_effect=fake_run
             ), patch("autodeduct_pipeline.llm.subprocess.run") as cleanup:
+                cleanup.return_value = subprocess.CompletedProcess(
+                    ["docker", "rm"], 1 if failure == "cleanup_failure" else 0,
+                    b"", b"cannot connect to Docker daemon" if failure == "cleanup_failure" else b"",
+                )
                 report = run_pipeline(args)
-                if failure == "timeout":
+                if failure in {"timeout", "preflight_timeout"}:
                     self.assertEqual(cleanup.call_args.args[0][:3], ["docker", "rm", "--force"])
             self.assertEqual(source.read_text(), SOURCE)
             self.assertIsNone(report.contract_report)
             self.assertEqual(report.mode, "llm")
-            self.assertEqual(len(commands), 1 if failure in {"runner", "missing", "agent_evidence"} else 2)
+            self.assertEqual(len(commands), 0 if failure in {"dependencies", "preflight_timeout"} else
+                             1 if failure in {"runner", "missing", "agent_evidence"} else 2)
             return report
 
     def test_host_generation_and_explicit_verification(self):
@@ -121,10 +134,29 @@ class LLMModeTests(unittest.TestCase):
             with self.subTest(runner=runner):
                 report = self.exercise(runner=runner)
                 self.assertEqual(report.status, "passed", report.errors)
-                self.assertEqual([stage.name for stage in report.stages], ["llm_workflow", "logos_verify", "skill_verify"])
+                self.assertEqual([stage.name for stage in report.stages], ["logos_environment", "llm_workflow", "logos_verify", "skill_verify"])
+
+    def test_missing_dependencies_stop_before_generation(self):
+        for runtime in ("local", "docker"):
+            with self.subTest(runtime=runtime):
+                report = self.exercise(runtime=runtime, failure="dependencies")
+                self.assertEqual(report.status, "failed")
+                self.assertEqual([stage.name for stage in report.stages], ["logos_environment"])
+                self.assertEqual(report.errors[-1]["stage"], "environment")
+                self.assertIn("install Frama-C", report.errors[-1]["message"])
+
+    def test_docker_preflight_timeout_stops_container(self):
+        report = self.exercise(runtime="docker", failure="preflight_timeout")
+        self.assertEqual(report.stages[0].status, "timeout")
+        self.assertEqual(report.errors[-1]["stage"], "environment")
 
     def test_docker_runtime_keeps_agent_on_host(self):
         report = self.exercise(runtime="docker")
+        self.assertEqual(report.status, "passed", report.errors)
+
+    @unittest.skipUnless(sys.platform != "win32", "requires ordinary symlink creation")
+    def test_generator_cannot_redirect_verification_logs_into_source(self):
+        report = self.exercise(failure="log_symlink")
         self.assertEqual(report.status, "passed", report.errors)
 
     def test_docker_timeout_stops_verifier_container(self):
@@ -132,6 +164,12 @@ class LLMModeTests(unittest.TestCase):
         self.assertEqual(report.status, "failed")
         self.assertEqual(report.stages[-1].status, "timeout")
         self.assertEqual(report.errors[-1]["stage"], "logos_verify")
+
+    def test_docker_cleanup_failure_is_reported(self):
+        report = self.exercise(runtime="docker", failure="cleanup_failure")
+        self.assertEqual(report.status, "failed")
+        cleanup_error = next(error for error in report.errors if error["stage"] == "cleanup")
+        self.assertIn("could not confirm cleanup of container", cleanup_error["message"])
 
     def test_invalid_results_and_changed_source_never_pass(self):
         for failure in ("runner", "missing", "agent_evidence", "wrapper_exit", "json", "hash", "verifier", "changed", "options", "malformed"):
@@ -175,6 +213,22 @@ class LLMModeTests(unittest.TestCase):
             with self.assertRaises(PipelineError):
                 validate_llm_options(args, output)
             self.assertEqual(runner.read_text(), "keep me")
+
+    def test_local_runtime_cannot_be_inside_writable_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            skill = root / "skill" / "SKILL.md"
+            skill.parent.mkdir()
+            skill.write_text("test skill")
+            runtime = skill.parent / "scripts"
+            runtime.mkdir()
+            wrapper = runtime / "generate_acsl.py"
+            wrapper.write_text("keep wrapper outside agent workspace")
+            args = parser().parse_args(["--mode", "llm", "--llm-skill", str(skill), "input.c"])
+            for output in (runtime, runtime / "output"):
+                with self.subTest(output=output), self.assertRaisesRegex(PipelineError, "LOGOS runtime files must be outside"):
+                    validate_llm_options(args, output)
+            self.assertEqual(wrapper.read_text(), "keep wrapper outside agent workspace")
 
     def test_container_launch_is_rejected_before_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
