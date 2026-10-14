@@ -37,21 +37,21 @@ No separate LOGOS checkout or global skill installation is needed at runtime.
 
 ## Local verification dependencies
 
-For local verification, clone LOGOS using your normal GitHub authentication:
+For local verification, clone LOGOS from its public repository:
 
 ```shell
 git clone https://github.com/rse-verification/logos.git ../logos
-git -C ../logos checkout 403334b11109d3d5eca9356b1529610cd9e57616
+git -C ../logos checkout cea177911b6ad5176122b4b3c415f92897c464d2
 export AUTODEDUCT_LLM_SKILL="$(cd ../logos && pwd)/skill/SKILL.md"
 ```
 
-This revision is on LOGOS's `llm-host-runtime` branch and supports the
-`generate-only` task, dependency preflight, and verifier evidence interface. Repository access is required while LOGOS
-is private. No global skill registration is necessary. Keep the skill and
+This revision is on LOGOS's `main` branch and supports the
+`generate-only` task, dependency preflight, and verifier evidence interface.
+No global skill registration is necessary. Keep the skill and
 runner files outside the selected proof output directory. `--llm-skill PATH`
 can replace the environment variable. These settings apply only to `local`.
 
-Follow [LOGOS setup](https://github.com/rse-verification/logos/blob/llm-host-runtime/docs/SETUP.md)
+Follow [LOGOS setup](https://github.com/rse-verification/logos/blob/main/docs/SETUP.md)
 for the libclang shared library; the `clang` executable alone is insufficient.
 Install Frama-C/WP and configure the provers on the host. Native Windows Python
 annotation is covered by LOGOS tests; full native Windows Frama-C verification
@@ -66,31 +66,24 @@ autodeduct llm --llm-runtime local --timeout 1200 \
 
 ## Build the verifier image
 
-Install/start Docker and [build the standard image](INSTALLATION.md#traditional-docker-toolchain),
-then build the LOGOS layer. **Image builders** need a compatible LOGOS checkout;
-users of the resulting image do not. If you skipped local setup, prepare the
-build context first:
-
-```shell
-git clone https://github.com/rse-verification/logos.git ../logos
-git -C ../logos checkout 403334b11109d3d5eca9356b1529610cd9e57616
-```
-
-From the AutoDeduct checkout:
+Run these commands **on the host, from the AutoDeduct checkout** after starting
+Docker. The standard image includes LOGOS, Saida, ISP and TriCera:
 
 ```shell
 docker build \
-  --build-context logos=../logos \
-  --build-arg LOGOS_REV="$(git -C ../logos rev-parse HEAD)" \
-  -t auto-deduct:logos -f Dockerfiles/LogosDockerfile .
+  -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
 ```
 
-BuildKit/named build contexts are required. On Apple Silicon, add
-`--platform linux/amd64` to both image builds. The runtime defaults to that
-platform. `LOGOS_REV` records the chosen checkout as an image label; it does
-not select it. Use `--build-arg AUTODEDUCT_IMAGE=IMAGE` to reuse another compatible base.
-Only LOGOS's `skill/` directory, including its GPL-2.0-only license, is copied.
-No source case studies, Git history or credentials are embedded.
+The Dockerfile fetches its pinned LOGOS revision inside the build, just as it
+fetches the other components. **Do not clone LOGOS for this Docker setup.**
+No separate LOGOS layer or named build context is needed. If you already have
+this standard image, skip the build and proceed to the command below.
+
+On Apple Silicon, add `--platform linux/amd64`; the runtime defaults to that
+platform. See [installation](INSTALLATION.md#standard-docker-image) for
+component versions. The build fetches LOGOS from its public repository.
+Only its `skill/` directory and resolved revision record are retained; Git
+history and credentials are absent from the image.
 
 ## Run with Docker verification
 
@@ -103,6 +96,7 @@ autodeduct llm --llm-runtime docker --timeout 1200 \
 ```
 
 The verifier image contains Python, libclang, LOGOS, Frama-C/WP and provers.
+`--llm-docker-image` defaults to the standard `auto-deduct:latest` image.
 AutoDeduct resolves its tag to an immutable image ID and extracts
 `/opt/logos/skill/SKILL.md` into a temporary host folder outside the agent's
 output workspace. Codex reads that copy; the wrapper runs from the same image

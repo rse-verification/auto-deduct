@@ -8,7 +8,7 @@ It is the default; `deductive` and `--mode deterministic` select the same path.
 
 ## Run in Docker
 
-After [building the standard image](INSTALLATION.md#traditional-docker-toolchain),
+After [building the standard image](INSTALLATION.md#standard-docker-image),
 run from the AutoDeduct checkout:
 
 ```shell

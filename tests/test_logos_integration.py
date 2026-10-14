@@ -74,6 +74,7 @@ class LogosDockerIntegrationTest(unittest.TestCase):
                 runner = shlex.join([sys.executable, str(ROOT / "tests/fixtures/logos_fixture_runner.py")])
                 args = parser().parse_args([
                     "--mode", "llm", "--llm-runtime", "docker",
+                    "--llm-docker-image", os.environ.get("AUTODEDUCT_IMAGE", "auto-deduct:latest"),
                     "--llm-runner", runner, "--wp-option=-wp-prover=qed", "--wp-rte",
                     "--output-dir", str(output), str(source),
                 ])

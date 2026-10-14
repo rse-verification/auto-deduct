@@ -86,7 +86,7 @@ def parser() -> argparse.ArgumentParser:
         help="run the LOGOS wrapper locally or in Docker; Codex always runs on the host (default: local)",
     )
     result.add_argument(
-        "--llm-docker-image", default="auto-deduct:logos", metavar="IMAGE",
+        "--llm-docker-image", default="auto-deduct:latest", metavar="IMAGE",
         help="LOGOS verifier image for --llm-runtime docker (default: %(default)s)",
     )
     result.add_argument(

@@ -17,7 +17,7 @@ contracts are generated. The default is `deductive`; existing
 
 ## Start here
 
-1. Choose your [installation](docs/INSTALLATION.md): traditional Docker toolchain,
+1. Choose your [installation](docs/INSTALLATION.md): standard Docker image,
    native tools, or the host launcher for LLM mode.
 2. Follow the usage guide for [deductive mode](docs/DEDUCTIVE.md) or
    [LLM mode](docs/LLM.md).
@@ -61,8 +61,9 @@ directly or add the checkout's `bin/` directory to `PATH`; see
 These examples require setup first. Docker mode does not install or build its
 image automatically. For larger LLM runs, see the timeout guidance in
 [LLM usage](docs/LLM.md#run-with-docker-verification).
-Docker LLM runs extract their skill from that image, so a separate local LOGOS
-checkout is unnecessary at runtime. Building the image from source requires one.
+The standard image includes LOGOS alongside Saida, ISP and TriCera. Docker LLM
+runs extract their skill from it; building or running that image requires no
+separate host LOGOS checkout.
 
 ## Reports and scope
 

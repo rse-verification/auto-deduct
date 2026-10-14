@@ -6,7 +6,7 @@ Choose a setup before running a command:
 
 | Workflow | Setup |
 | --- | --- |
-| Deductive with Docker | Build the [traditional image](#traditional-docker-toolchain); host Python/Codex are unnecessary |
+| Deductive with Docker | Build the [standard image](#standard-docker-image); host Python/Codex are unnecessary |
 | Deductive locally | Install the [native toolchain](#native-installation) and host launcher |
 | LLM locally | Install the [host launcher](#host-launcher), then follow [LLM local setup](LLM.md#local-verification-dependencies) |
 | LLM with Docker verification | Install the host launcher, then follow [LLM Docker setup](LLM.md#build-the-verifier-image) |
@@ -36,13 +36,18 @@ is insufficient for LLM mode. The traditional Docker command runs the CLI inside
 the image and does not need a host CLI installation.
 
 LLM Docker mode extracts the LOGOS skill from its verifier image. A separate
-local LOGOS checkout is required only for local verification or building that
-image from source. See [LLM setup](LLM.md).
+local LOGOS checkout is required only for local verification. The standard
+Docker build fetches LOGOS itself, alongside the other components.
+See [LLM setup](LLM.md).
 
-## Traditional Docker toolchain
+<a id="traditional-docker-toolchain"></a>
+
+## Standard Docker image
 
 Clone the repository and build from its root. The root is required because
-the Dockerfile copies the CLI from `bin/`.
+the Dockerfile copies the CLI from `bin/`. The standard image includes
+Saida, ISP, TriCera, Frama-C/WP, LOGOS and libclang. Choose the workflow when
+running AutoDeduct; a second image build or host LOGOS checkout is unnecessary.
 
 ```shell
 git clone --branch llm-skill-mode https://github.com/rse-verification/auto-deduct.git
@@ -58,7 +63,11 @@ Verify the image:
 ```shell
 docker run --rm auto-deduct:latest autodeduct --version
 docker run --rm auto-deduct:latest autodeduct --help
+docker run --rm auto-deduct:latest python3 /opt/logos/skill/scripts/generate_acsl.py --check-dependencies
 ```
+
+The build fetches pinned component revisions directly from their public
+repositories. No separate LOGOS checkout or GitHub credentials are needed.
 
 ## Apple Silicon
 
@@ -80,10 +89,13 @@ The default image uses OCaml 5.4.0, Frama-C 33.0, ISP `v0.4.0`, Saida
 `v0.6.0`, and TriCera `v0.5`. All three analysis components are pinned to
 releases. OCaml is installed in the image's default opam switch rather than
 inherited from the Ubuntu package version.
+LOGOS is pinned to commit `cea177911b6ad5176122b4b3c415f92897c464d2`
+on its `main` branch.
 
-The Dockerfile accepts `SAIDA_REPO`, `TRICERA_REPO`, and `ISP_REPO`, together
-with `OCAML_VER`, `SAIDA_VER`, `TRICERA_VER`, and `ISP_VER`. A component version
-may be a branch, tag, or commit reachable from the selected repository.
+The Dockerfile accepts `SAIDA_REPO`, `TRICERA_REPO`, `ISP_REPO`, and `LOGOS_REPO`,
+together with `OCAML_VER`, `SAIDA_VER`, `TRICERA_VER`, `ISP_VER`, and `LOGOS_VER`.
+A component version may be a branch, tag, or commit reachable from the selected
+repository.
 
 ```shell
 docker build \
@@ -106,9 +118,11 @@ docker build \
 ```
 
 Each resolved component commit is stored in `/home/dev/repos/<component>/REVISION`
-inside the image. Prefer immutable tags or commits for release images. Add
-`--no-cache` when deliberately retesting a moving branch that Docker may have
-cached.
+inside the image; LOGOS records its commit in `/opt/logos/REVISION`. Only LOGOS's
+`skill/` directory and that revision record are retained, including its license;
+its temporary checkout and Git history are removed. Prefer immutable tags or
+commits for release images. Add `--no-cache` when deliberately retesting a
+moving branch that Docker may have cached.
 
 ## Corporate Proxy Builds
 

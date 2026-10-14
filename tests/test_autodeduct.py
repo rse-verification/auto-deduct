@@ -87,6 +87,20 @@ class AutoDeductPipelineTests(unittest.TestCase):
             dockerfile,
         )
 
+    def test_standard_docker_image_includes_logos(self):
+        dockerfile = (ROOT / "Dockerfiles/AutoDeductDockerfile").read_text()
+        self.assertIn("FROM auto-deduct-runtime AS auto-deduct-logos", dockerfile)
+        self.assertIn('ARG LOGOS_REPO="https://github.com/rse-verification/logos.git"', dockerfile)
+        self.assertRegex(dockerfile, r'ARG LOGOS_VER="[0-9a-f]{40}"')
+        self.assertIn("libclang-dev", dockerfile)
+        self.assertIn("cp -a /tmp/logos/skill /opt/logos/skill", dockerfile)
+        self.assertIn("git -C /tmp/logos rev-parse HEAD > /opt/logos/REVISION", dockerfile)
+        self.assertIn("rm -rf /tmp/logos", dockerfile)
+        self.assertIn("--check-dependencies", dockerfile)
+        self.assertFalse((ROOT / "Dockerfiles/LogosDockerfile").exists())
+        args = MODULE.parser().parse_args(["--mode", "llm", "--llm-runtime", "docker", "input.c"])
+        self.assertEqual(args.llm_docker_image, "auto-deduct:latest")
+
     def test_timeout_must_be_finite_and_positive(self):
         for value in ("0", "-1", "nan", "inf"):
             with self.subTest(value=value), self.assertRaises(
