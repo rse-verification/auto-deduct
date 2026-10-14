@@ -93,10 +93,7 @@ The following are known restrictions of the current implementation:
   undocumented functions. Its parser requires libclang.
 - Include/macro options configure Frama-C verification, not the annotation parser.
   Project-specific parsing configurations may fail.
-- The workflow does not run ISP/Eva invariant inference or ISP helper coverage.
 - Codex inside Docker is unsupported. Docker verification is selected explicitly;
   without Docker the complete local verification dependencies are required.
-- Full native Windows Frama-C verification and a complete native host installation
-  remain unqualified. Use WSL for a Linux toolchain on Windows.
 
 See [LLM usage](LLM.md) for runtime dependencies, reports and troubleshooting.
