@@ -12,7 +12,7 @@ runs the LOGOS Python wrapper to insert contracts and run Frama-C WP.
 | --- | --- | --- |
 | Host Python 3.10+ and AutoDeduct checkout | Required | Required |
 | Host Codex CLI and login | Required | Required |
-| Local LOGOS skill checkout | Required | Required |
+| Local LOGOS checkout and skill path | Required | Unnecessary; extracted from image |
 | Host libclang and Frama-C/WP/provers | Required | Supplied by verifier image |
 | Docker and prepared LOGOS verifier image | Unused | Required |
 
@@ -21,30 +21,35 @@ Both runtimes need the [host launcher](INSTALLATION.md#host-launcher): use
 `./bin/autodeduct` from the checkout or put `bin/` on `PATH`. A separate
 AutoDeduct package installation is unnecessary.
 
-## Set up the host agent and LOGOS
+## Set up the host agent
 
 Install [Codex CLI](https://learn.chatgpt.com/docs/cli) on the host and sign in:
 
 ```shell
 codex login
 codex --version
+export PATH="$PWD/bin:$PATH"
 ```
 
-From the AutoDeduct checkout, clone LOGOS using your normal GitHub authentication:
+Run this setup from the AutoDeduct checkout. For Docker verification with a
+prepared image, proceed to [Docker usage](#run-with-docker-verification).
+No separate LOGOS checkout or global skill installation is needed at runtime.
+
+## Local verification dependencies
+
+For local verification, clone LOGOS using your normal GitHub authentication:
 
 ```shell
 git clone https://github.com/rse-verification/logos.git ../logos
 git -C ../logos checkout 403334b11109d3d5eca9356b1529610cd9e57616
 export AUTODEDUCT_LLM_SKILL="$(cd ../logos && pwd)/skill/SKILL.md"
-export PATH="$PWD/bin:$PATH"
 ```
 
 This revision is on LOGOS's `llm-host-runtime` branch and supports the
 `generate-only` task, dependency preflight, and verifier evidence interface. Repository access is required while LOGOS
 is private. No global skill registration is necessary. Keep the skill and
-runner files outside the selected proof output directory.
-
-## Local verification dependencies
+runner files outside the selected proof output directory. `--llm-skill PATH`
+can replace the environment variable. These settings apply only to `local`.
 
 Follow [LOGOS setup](https://github.com/rse-verification/logos/blob/llm-host-runtime/docs/SETUP.md)
 for the libclang shared library; the `clang` executable alone is insufficient.
@@ -62,7 +67,16 @@ autodeduct llm --llm-runtime local --timeout 1200 \
 ## Build the verifier image
 
 Install/start Docker and [build the standard image](INSTALLATION.md#traditional-docker-toolchain),
-then build the LOGOS layer from the same checkout as the host skill:
+then build the LOGOS layer. **Image builders** need a compatible LOGOS checkout;
+users of the resulting image do not. If you skipped local setup, prepare the
+build context first:
+
+```shell
+git clone https://github.com/rse-verification/logos.git ../logos
+git -C ../logos checkout 403334b11109d3d5eca9356b1529610cd9e57616
+```
+
+From the AutoDeduct checkout:
 
 ```shell
 docker build \
@@ -80,7 +94,8 @@ No source case studies, Git history or credentials are embedded.
 
 ## Run with Docker verification
 
-Run on the host after the setup above:
+Run on the host with the host launcher, authenticated Codex, Docker and the
+prepared image available locally:
 
 ```shell
 autodeduct llm --llm-runtime docker --timeout 1200 \
@@ -88,11 +103,23 @@ autodeduct llm --llm-runtime docker --timeout 1200 \
 ```
 
 The verifier image contains Python, libclang, LOGOS, Frama-C/WP and provers.
+AutoDeduct resolves its tag to an immutable image ID and extracts
+`/opt/logos/skill/SKILL.md` into a temporary host folder outside the agent's
+output workspace. Codex reads that copy; the wrapper runs from the same image
+ID. No local LOGOS checkout, `--llm-skill` flag, or host wrapper installation is
+required. Docker mode always uses the image's skill, even if
+`AUTODEDUCT_LLM_SKILL` or `--llm-skill` is set.
+
 It contains no Codex installation or model login. Source/header directories are
 mounted read-only at the same absolute paths, and the output folder is writable
 with the host UID/GID. The container has a read-only root filesystem, temporary
 `/tmp`, no added capabilities and no network access. Host libclang and Frama-C
-are unnecessary. Codex does not launch Docker; AutoDeduct does that afterwards.
+are unnecessary. AutoDeduct runs extraction and dependency checks before Codex,
+and annotation/verification after generation. Codex does not launch Docker.
+
+The temporary skill folder is removed when the workflow ends. The run keeps
+`llm-skill.md` for review, and `llm-task.json` records its hash and the image ID.
+The temporary `skill` path recorded in that task is no longer present afterwards.
 
 Use `--llm-docker-image IMAGE` for a compatible alternate image and
 `--llm-docker-platform PLATFORM` for its platform. Docker Desktop must permit
@@ -118,7 +145,8 @@ Docker. That arrangement does not start an LLM agent.
 
 ## Contract and report handoff
 
-1. AutoDeduct checks verification dependencies for the selected runtime.
+1. AutoDeduct selects the local skill, or resolves the Docker image and extracts
+   its skill. It checks verification dependencies before calling the model.
 2. It writes `llm-task.json` with `workflow: "generate-only"`, source and output
    paths, and requested verification arguments.
 3. Codex reads the skill/source and writes `llm-contracts.json` with structured
@@ -135,12 +163,13 @@ for human review. The model's final prose is not proof evidence.
 
 | Artifact | Owner and purpose |
 | --- | --- |
-| `llm-task.json` | AutoDeduct generation request |
+| `llm-task.json` | AutoDeduct generation request, skill hash and Docker image ID |
+| `llm-skill.md` | Docker skill snapshot; the temporary host copy is removed |
 | `llm-contracts.json` | Host agent's contracts with source hash |
 | `inferred.c` | LOGOS annotated source |
 | `llm-verification.json` | LOGOS process evidence |
 | `inferred.wp-report.txt` / `.pdf` | LOGOS human-readable reports |
-| Stage logs and `llm-final.txt` | Dependency, generation and verification diagnostics |
+| Stage logs and `llm-final.txt` | Image/skill setup, dependency, generation and verification diagnostics |
 | `report.json` | AutoDeduct's final acceptance decision |
 
 Evidence schema version 1 contains the command, process `returncode`,
@@ -184,13 +213,14 @@ intended requirements. See [limitations](LIMITATIONS.md).
 
 ## Offline integration check
 
-With the compatible LOGOS checkout and verifier image configured:
+With the verifier image prepared (no host LOGOS checkout is needed):
 
 ```shell
-AUTODEDUCT_LOGOS_ROOT="$(cd ../logos && pwd)" \
 AUTODEDUCT_RUN_LOGOS_DOCKER=1 \
 python3 -m unittest discover -s tests -p test_logos_integration.py -v
 ```
 
 This runs the host launcher with a fixed test contract writer and real LOGOS/WP,
 including an intentionally incomplete specification. It does not call a model.
+For the separate local integration check, set `AUTODEDUCT_LOGOS_ROOT` to a
+compatible checkout and provide Frama-C on the host `PATH`.

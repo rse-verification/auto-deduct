@@ -22,8 +22,11 @@ annotated C output and uses Eva states to produce additional ACSL clauses. ISP
 also owns reachable-function and missing-contract semantics; AutoDeduct reads
 its JSON report rather than reimplementing the call graph.
 
-With `--mode llm`, `logos_environment` checks wrapper dependencies for the selected
-runtime. `llm_workflow` then invokes Codex with the configured SKILL.md
+With `--mode llm --llm-runtime docker`, `logos_image` resolves the installed
+verifier image to an immutable ID, then `logos_skill` extracts its SKILL.md for
+the host agent. These two stages are unnecessary in local mode, which uses the
+configured host skill. `logos_environment` checks wrapper dependencies for the
+selected runtime. `llm_workflow` then invokes Codex with the selected SKILL.md
 and a generation-only task on the host. `logos_verify` explicitly invokes the
 LOGOS Python wrapper locally or inside Docker for annotation and verification.
 `skill_verify` validates the returned WP evidence without rerunning WP.

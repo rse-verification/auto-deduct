@@ -31,7 +31,7 @@ contracts are generated. The default is `deductive`; existing
 | Deductive with Docker | Docker client | Entire traditional pipeline |
 | Deductive without Docker | AutoDeduct and its verification dependencies | Unused |
 | LLM with `--llm-runtime local` | Python, AutoDeduct, Codex, LOGOS and verification dependencies | Unused |
-| LLM with `--llm-runtime docker` | Python, AutoDeduct launcher, authenticated Codex and local LOGOS skill | LOGOS Python wrapper, libclang, Frama-C/WP and provers |
+| LLM with `--llm-runtime docker` | Python, AutoDeduct launcher and authenticated Codex; skill extracted from image | LOGOS Python wrapper, libclang, Frama-C/WP and provers |
 
 Docker is optional. **Both LLM runtimes use the host AutoDeduct launcher and
 host Codex CLI.** Running Codex inside Docker is unsupported. The current LLM
@@ -52,7 +52,6 @@ From an AutoDeduct checkout with the selected dependencies configured:
 
 # Host Codex and LOGOS verification in the prepared Docker image:
 ./bin/autodeduct llm --llm-runtime docker \
-  --llm-skill /absolute/path/to/logos/skill/SKILL.md \
   --output-dir /tmp/llm-proof path/to/program.c
 ```
 
@@ -62,6 +61,8 @@ directly or add the checkout's `bin/` directory to `PATH`; see
 These examples require setup first. Docker mode does not install or build its
 image automatically. For larger LLM runs, see the timeout guidance in
 [LLM usage](docs/LLM.md#run-with-docker-verification).
+Docker LLM runs extract their skill from that image, so a separate local LOGOS
+checkout is unnecessary at runtime. Building the image from source requires one.
 
 ## Reports and scope
 

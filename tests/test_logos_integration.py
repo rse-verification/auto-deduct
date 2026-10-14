@@ -1,6 +1,7 @@
 """Exercise real LOGOS and WP with a fixture runner (no LLM calls).
 
-Set AUTODEDUCT_LOGOS_ROOT to a LOGOS checkout and provide Frama-C on PATH.
+For local verification, set AUTODEDUCT_LOGOS_ROOT and provide Frama-C on PATH.
+Docker verification only needs AUTODEDUCT_RUN_LOGOS_DOCKER=1 and the prepared image.
 """
 
 import hashlib
@@ -55,8 +56,8 @@ class LogosIntegrationTest(unittest.TestCase):
                     self.assertEqual(report.stages[-1].status, "passed")
 
 
-@unittest.skipUnless(LOGOS and os.environ.get("AUTODEDUCT_RUN_LOGOS_DOCKER") == "1",
-                     "set AUTODEDUCT_LOGOS_ROOT and AUTODEDUCT_RUN_LOGOS_DOCKER=1 for host/Docker integration")
+@unittest.skipUnless(os.environ.get("AUTODEDUCT_RUN_LOGOS_DOCKER") == "1",
+                     "set AUTODEDUCT_RUN_LOGOS_DOCKER=1 for host/Docker integration")
 class LogosDockerIntegrationTest(unittest.TestCase):
     def test_host_launcher_and_real_container_wrapper(self):
         for expected_result in (1, 2):
@@ -73,7 +74,6 @@ class LogosDockerIntegrationTest(unittest.TestCase):
                 runner = shlex.join([sys.executable, str(ROOT / "tests/fixtures/logos_fixture_runner.py")])
                 args = parser().parse_args([
                     "--mode", "llm", "--llm-runtime", "docker",
-                    "--llm-skill", str(Path(LOGOS).resolve() / "skill/SKILL.md"),
                     "--llm-runner", runner, "--wp-option=-wp-prover=qed", "--wp-rte",
                     "--output-dir", str(output), str(source),
                 ])
@@ -83,8 +83,16 @@ class LogosDockerIntegrationTest(unittest.TestCase):
                 evidence = json.loads((output / "llm-verification.json").read_text())
                 self.assertEqual(evidence["returncode"], 0)
                 self.assertEqual(evidence["verified"], expected_result == 1)
-                self.assertEqual(report.stages[2].command[:2], ["docker", "run"])
-                self.assertEqual(report.stages[2].returncode, 0 if expected_result == 1 else 1)
+                self.assertEqual([stage.name for stage in report.stages],
+                                 ["logos_image", "logos_skill", "logos_environment", "llm_workflow", "logos_verify", "skill_verify"])
+                self.assertEqual(report.stages[4].command[:2], ["docker", "run"])
+                self.assertEqual(report.stages[4].returncode, 0 if expected_result == 1 else 1)
+                task = json.loads((output / "llm-task.json").read_text())
+                snapshot = output / "llm-skill.md"
+                self.assertEqual(task["skill_sha256"], hashlib.sha256(snapshot.read_bytes()).hexdigest())
+                self.assertFalse(Path(task["skill"]).exists())
+                for stage in (report.stages[1], report.stages[2], report.stages[4]):
+                    self.assertIn(task["docker_image_id"], stage.command)
                 self.assertEqual(evidence["source_sha256"], hashlib.sha256((output / "inferred.c").read_bytes()).hexdigest())
 
 

@@ -75,7 +75,7 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument(
         "--llm-skill", default=os.environ.get("AUTODEDUCT_LLM_SKILL"),
-        metavar="SKILL_MD", help="local skill workflow (or AUTODEDUCT_LLM_SKILL)",
+        metavar="SKILL_MD", help="local runtime skill (or AUTODEDUCT_LLM_SKILL); Docker extracts its skill from the image",
     )
     result.add_argument(
         "--llm-runner", default=os.environ.get("AUTODEDUCT_LLM_RUNNER", "codex exec"),

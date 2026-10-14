@@ -35,6 +35,10 @@ checkout `bin/` path to your shell's `PATH` setup. Installing only the Docker im
 is insufficient for LLM mode. The traditional Docker command runs the CLI inside
 the image and does not need a host CLI installation.
 
+LLM Docker mode extracts the LOGOS skill from its verifier image. A separate
+local LOGOS checkout is required only for local verification or building that
+image from source. See [LLM setup](LLM.md).
+
 ## Traditional Docker toolchain
 
 Clone the repository and build from its root. The root is required because

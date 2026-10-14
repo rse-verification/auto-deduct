@@ -36,6 +36,11 @@ IGNORED_SOURCE_DIRECTORIES = frozenset({
 })
 SUPPORTED_SOURCE_SUFFIXES = frozenset({".c"})
 GENERATED_OUTPUT_NAMES = frozenset({
+    "logos_image.stdout.log",
+    "logos_image.stderr.log",
+    "logos_skill.stdout.log",
+    "logos_skill.stderr.log",
+    "llm-skill.md",
     "logos_environment.stdout.log",
     "logos_environment.stderr.log",
     "logos_verify.stdout.log",

@@ -15,6 +15,8 @@ from autodeduct_pipeline.llm import validate_annotation_only, validate_llm_optio
 
 SOURCE = "int helper(void)\n{\n    return 1;\n}\n/*@ ensures \\result == 1; */\nint main(void)\n{\n    return helper();\n}\n"
 ANNOTATED = "/*@ assigns \\nothing; ensures \\result == 1; */\n" + SOURCE
+IMAGE_ID = "sha256:" + "a" * 64
+IMAGE_SKILL = "Use the image's LOGOS contract skill. λόγος\n"
 
 
 class LLMModeTests(unittest.TestCase):
@@ -38,13 +40,29 @@ class LLMModeTests(unittest.TestCase):
             for artifact in ("llm-verification.json", "llm-contracts.json", "inferred.c"):
                 (output / artifact).write_text("stale")
             args = parser().parse_args([
-                "--mode", "llm", "--llm-skill", str(skill), "--llm-runner", runner,
+                "--mode", "llm", "--llm-runner", runner,
+                *(["--llm-skill", str(skill)] if runtime == "local" else []),
                 "--llm-runtime", runtime,
                 "--wp-rte", "--wp-option=-wp-prover=qed", "--output-dir", str(output), str(source),
             ])
             commands = []
+            cached_skill = None
 
             def fake_run(command, **kwargs):
+                nonlocal cached_skill
+                if command[:3] == ["docker", "image", "inspect"]:
+                    if failure == "image":
+                        return subprocess.CompletedProcess(command, 1, "", "No such image")
+                    return subprocess.CompletedProcess(command, 0, "invalid" if failure == "image_id" else IMAGE_ID + "\n", "")
+                if command[:2] == ["docker", "run"]:
+                    self.assertIn(IMAGE_ID, command)
+                if "-c" in command and "SKILL.md" in command[-1]:
+                    self.assertNotIn("--mount", command)
+                    if failure == "extraction_timeout":
+                        raise subprocess.TimeoutExpired(command, 1)
+                    if failure == "extraction":
+                        return subprocess.CompletedProcess(command, 1, "", "SKILL.md missing")
+                    return subprocess.CompletedProcess(command, 0, "  \n" if failure == "empty_skill" else IMAGE_SKILL, "")
                 if "--check-dependencies" in command:
                     if failure == "dependencies":
                         return subprocess.CompletedProcess(command, 1, "", "Frama-C was not found in PATH; install Frama-C with WP")
@@ -57,9 +75,18 @@ class LLMModeTests(unittest.TestCase):
                 self.assertIn("-wp-rte", task["verification_options"])
                 self.assertIn("-wp-prover=qed", task["verification_options"])
                 if len(commands) == 1:
+                    selected_skill = Path(task["skill"])
+                    self.assertTrue(selected_skill.is_file())
+                    expected_skill = IMAGE_SKILL if runtime == "docker" else skill.read_text()
+                    self.assertEqual(selected_skill.read_text(), expected_skill)
+                    self.assertEqual(task["skill_sha256"], hashlib.sha256(expected_skill.encode()).hexdigest())
+                    self.assertEqual(task["docker_image_id"], IMAGE_ID if runtime == "docker" else None)
+                    if runtime == "docker":
+                        cached_skill = selected_skill
+                        self.assertNotIn(output, selected_skill.parents)
                     self.assertEqual(command[:2], ["codex", "exec"])
                     self.assertEqual("--sandbox" in command, "--approve-for-me" not in command)
-                    self.assertIn(str(skill), command[-1])
+                    self.assertIn(str(selected_skill), command[-1])
                     self.assertIn("complete SKILL.md", command[-1])
                     self.assertIn("generate-only", command[-1])
                     for artifact in ("llm-verification.json", "llm-contracts.json", "inferred.c"):
@@ -75,6 +102,11 @@ class LLMModeTests(unittest.TestCase):
                         (output / "llm-verification.json").write_text("{}")
                     if failure == "log_symlink":
                         (output / "skill_verify.stdout.log").symlink_to(source)
+                    if failure == "changed_skill":
+                        selected_skill.chmod(0o600)
+                        selected_skill.write_text("changed instructions")
+                    if failure == "snapshot_symlink":
+                        (output / "llm-skill.md").symlink_to(source)
                     return subprocess.CompletedProcess(command, 0, "generated contracts", "")
                 if runtime == "docker":
                     self.assertEqual(command[:2], ["docker", "run"])
@@ -120,13 +152,20 @@ class LLMModeTests(unittest.TestCase):
                     b"", b"cannot connect to Docker daemon" if failure == "cleanup_failure" else b"",
                 )
                 report = run_pipeline(args)
-                if failure in {"timeout", "preflight_timeout"}:
+                if failure in {"timeout", "preflight_timeout", "extraction_timeout"}:
                     self.assertEqual(cleanup.call_args.args[0][:3], ["docker", "rm", "--force"])
             self.assertEqual(source.read_text(), SOURCE)
             self.assertIsNone(report.contract_report)
             self.assertEqual(report.mode, "llm")
-            self.assertEqual(len(commands), 0 if failure in {"dependencies", "preflight_timeout"} else
-                             1 if failure in {"runner", "missing", "agent_evidence"} else 2)
+            setup_failure = failure in {"image", "image_id", "extraction", "extraction_timeout", "empty_skill", "dependencies", "preflight_timeout"}
+            self.assertEqual(len(commands), 0 if setup_failure else
+                             1 if failure in {"runner", "missing", "agent_evidence", "changed_skill"} else 2)
+            if cached_skill is not None:
+                self.assertFalse(cached_skill.parent.exists())
+            self.assertEqual(list(root.glob(".autodeduct-logos-skill-*")), [])
+            if runtime == "docker" and failure not in {"image", "image_id", "extraction", "extraction_timeout", "empty_skill"}:
+                self.assertFalse((output / "llm-skill.md").is_symlink())
+                self.assertEqual((output / "llm-skill.md").read_text(), IMAGE_SKILL)
             return report
 
     def test_host_generation_and_explicit_verification(self):
@@ -141,18 +180,55 @@ class LLMModeTests(unittest.TestCase):
             with self.subTest(runtime=runtime):
                 report = self.exercise(runtime=runtime, failure="dependencies")
                 self.assertEqual(report.status, "failed")
-                self.assertEqual([stage.name for stage in report.stages], ["logos_environment"])
+                self.assertEqual([stage.name for stage in report.stages],
+                                 (["logos_image", "logos_skill"] if runtime == "docker" else []) + ["logos_environment"])
                 self.assertEqual(report.errors[-1]["stage"], "environment")
                 self.assertIn("install Frama-C", report.errors[-1]["message"])
 
     def test_docker_preflight_timeout_stops_container(self):
         report = self.exercise(runtime="docker", failure="preflight_timeout")
-        self.assertEqual(report.stages[0].status, "timeout")
+        self.assertEqual(report.stages[-1].status, "timeout")
         self.assertEqual(report.errors[-1]["stage"], "environment")
 
     def test_docker_runtime_keeps_agent_on_host(self):
         report = self.exercise(runtime="docker")
         self.assertEqual(report.status, "passed", report.errors)
+        self.assertEqual([stage.name for stage in report.stages],
+                         ["logos_image", "logos_skill", "logos_environment", "llm_workflow", "logos_verify", "skill_verify"])
+
+    def test_docker_image_and_skill_errors_stop_before_generation(self):
+        for failure in ("image", "image_id", "extraction", "extraction_timeout", "empty_skill"):
+            with self.subTest(failure=failure):
+                report = self.exercise(runtime="docker", failure=failure)
+                self.assertEqual(report.status, "failed")
+                self.assertNotIn("llm_workflow", [stage.name for stage in report.stages])
+                self.assertTrue(report.errors)
+
+    def test_modified_extracted_skill_is_rejected(self):
+        report = self.exercise(runtime="docker", failure="changed_skill")
+        self.assertEqual(report.status, "failed")
+        self.assertIn("skill changed", report.errors[-1]["message"])
+
+    def test_docker_generation_failure_cleans_temporary_skill(self):
+        report = self.exercise(runtime="docker", failure="runner")
+        self.assertEqual(report.status, "failed")
+        self.assertEqual(report.errors[-1]["stage"], "llm_workflow")
+
+    @unittest.skipUnless(sys.platform != "win32", "requires ordinary symlink creation")
+    def test_extracted_snapshot_cannot_redirect_into_source(self):
+        report = self.exercise(runtime="docker", failure="snapshot_symlink")
+        self.assertEqual(report.status, "passed", report.errors)
+
+    def test_docker_ignores_host_skill_but_local_requires_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory).resolve()
+            args = parser().parse_args(["--mode", "llm", "--llm-runtime", "docker",
+                                       "--llm-skill", str(output / "nonexistent.md"), "input.c"])
+            with patch("autodeduct_pipeline.llm.shutil.which", return_value="docker"):
+                validate_llm_options(args, output)
+            args.llm_runtime = "local"
+            with self.assertRaisesRegex(PipelineError, "set --llm-skill"):
+                validate_llm_options(args, output)
 
     @unittest.skipUnless(sys.platform != "win32", "requires ordinary symlink creation")
     def test_generator_cannot_redirect_verification_logs_into_source(self):

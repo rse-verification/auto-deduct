@@ -1,5 +1,6 @@
 """Run host contract generation, then invoke LOGOS and validate WP evidence."""
 
+import copy
 import hashlib
 import json
 import os
@@ -8,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -31,9 +33,12 @@ def validate_llm_options(args, output_dir):
         return
     if in_container():
         raise PipelineError("input", "LLM mode must be launched on the host; running Codex inside containers is unsupported")
-    if not args.llm_skill or not Path(args.llm_skill).expanduser().is_file():
+    if args.llm_runtime == "local" and (not args.llm_skill or not Path(args.llm_skill).expanduser().is_file()):
         raise PipelineError("input", "set --llm-skill or AUTODEDUCT_LLM_SKILL to an installed SKILL.md")
-    for word in [str(Path(args.llm_skill).expanduser().resolve()), *command_words(args.llm_runner)]:
+    protected = command_words(args.llm_runner)
+    if args.llm_runtime == "local":
+        protected.append(str(Path(args.llm_skill).expanduser().resolve()))
+    for word in protected:
         # Bare command names and CLI arguments are not files in the current directory.
         if not Path(word).expanduser().is_file():
             continue
@@ -70,6 +75,13 @@ def validate_mount_path(path):
         raise PipelineError("input", "Docker bind-mount paths cannot contain commas or newlines")
 
 
+def docker_run_options(args, name):
+    return ["docker", "run", "--rm", "--name", name, "--platform", args.llm_docker_platform,
+            "--network", "none", "--read-only", "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges", "--tmpfs", "/tmp:rw,nosuid,size=256m",
+            "--user", f"{os.getuid()}:{os.getgid()}"]
+
+
 def wrapper_command(args, source, output_dir, contracts, annotated, evidence_file, options,
                     *, check_dependencies=False):
     wrapper_args = ["--check-dependencies"] if check_dependencies else [
@@ -80,10 +92,7 @@ def wrapper_command(args, source, output_dir, contracts, annotated, evidence_fil
         wrapper = Path(args.llm_skill).expanduser().resolve().parent / "scripts/generate_acsl.py"
         return [sys.executable, str(wrapper), *wrapper_args], None
     name = f"autodeduct-logos-{uuid.uuid4().hex}"
-    command = ["docker", "run", "--rm", "--name", name, "--platform", args.llm_docker_platform,
-               "--network", "none", "--read-only", "--cap-drop", "ALL",
-               "--security-opt", "no-new-privileges", "--tmpfs", "/tmp:rw,nosuid,size=256m",
-               "--user", f"{os.getuid()}:{os.getgid()}"]
+    command = docker_run_options(args, name)
     # Preserve absolute paths so verifier evidence matches the host task exactly.
     roots = {source.parent, *(Path(value).expanduser().resolve() for value in args.include)}
     for root in sorted(roots, key=str):
@@ -154,6 +163,62 @@ def validate_annotation_only(source, annotated):
 
 
 def run_skill_workflow(args, source, output_dir, report):
+    if args.llm_runtime == "local":
+        return _run_skill_workflow(args, source, output_dir, report,
+                                   Path(args.llm_skill).expanduser().resolve())
+
+    image = run_stage(
+        name="logos_image", description="Resolve the verifier image to an immutable ID",
+        command=["docker", "image", "inspect", "--format", "{{.Id}}", args.llm_docker_image],
+        cwd=output_dir, output_dir=output_dir, timeout=args.timeout,
+    )
+    report.stages.append(image)
+    if image.status != "passed":
+        report.errors.append({"stage": image.name, "message":
+                              f"{image.error or 'image inspection failed'}; build or load the selected LOGOS verifier image first"})
+        return report
+    image_id = Path(image.stdout_file).read_text(encoding="utf-8").strip()
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+        image.status = "failed"
+        image.error = "Docker did not return a valid immutable image ID"
+        report.errors.append({"stage": image.name, "message": image.error})
+        return report
+    pinned_args = copy.copy(args)
+    pinned_args.llm_docker_image = image_id
+    name = f"autodeduct-logos-{uuid.uuid4().hex}"
+    extraction = run_logos_stage(
+        name="logos_skill", description="Extract the LOGOS skill from the pinned verifier image",
+        command=[*docker_run_options(pinned_args, name), image_id, "python3", "-c",
+                 "from pathlib import Path; print(Path('/opt/logos/skill/SKILL.md').read_text(encoding='utf-8'), end='')"],
+        container_name=name, report=report, cwd=output_dir, output_dir=output_dir,
+        timeout=args.timeout,
+    )
+    report.stages.append(extraction)
+    if extraction.status != "passed":
+        report.errors.append({"stage": extraction.name, "message": extraction.error or "LOGOS skill extraction failed"})
+        return report
+    skill_text = Path(extraction.stdout_file).read_text(encoding="utf-8")
+    if not skill_text.strip():
+        extraction.status = "failed"
+        extraction.error = "the verifier image contains an empty LOGOS SKILL.md"
+        report.errors.append({"stage": extraction.name, "message": extraction.error})
+        return report
+    snapshot = output_dir / "llm-skill.md"
+    output_info = output_dir.stat()
+    output_identity = (output_info.st_dev, output_info.st_ino)
+    extraction.artifact = str(snapshot)
+    # Keep the instructions outside the agent workspace, and retain a review copy.
+    with tempfile.TemporaryDirectory(prefix=".autodeduct-logos-skill-", dir=output_dir.parent) as cache:
+        skill = Path(cache).resolve() / "SKILL.md"
+        write_text(skill, skill_text)
+        skill.chmod(0o400)
+        try:
+            return _run_skill_workflow(pinned_args, source, output_dir, report, skill)
+        finally:
+            write_text(snapshot, skill_text, expected_parent=output_identity)
+
+
+def _run_skill_workflow(args, source, output_dir, report, skill):
     try:
         source_text = source.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as error:
@@ -162,7 +227,12 @@ def run_skill_workflow(args, source, output_dir, report):
     contracts = output_dir / "llm-contracts.json"
     annotated = output_dir / SAIDA_OUTPUT
     evidence_file = output_dir / "llm-verification.json"
-    skill = Path(args.llm_skill).expanduser().resolve()
+    try:
+        skill_text = skill.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        report.errors.append({"stage": "logos_skill", "message": f"could not read LOGOS skill: {error}"})
+        return report
+    skill_sha256 = hashlib.sha256(skill_text.encode("utf-8")).hexdigest()
     options = [*command_options(args, [source]), *args.wp_option]
     if args.wp_rte:
         options.append("-wp-rte")
@@ -185,6 +255,8 @@ def run_skill_workflow(args, source, output_dir, report):
     task_file = output_dir / "llm-task.json"
     write_text(task_file, json.dumps({
         "workflow": "generate-only",
+        "skill_sha256": skill_sha256,
+        "docker_image_id": args.llm_docker_image if args.llm_runtime == "docker" else None,
         "skill": str(skill), "source": str(source),
         "contracts": str(contracts), "annotated_source": str(annotated),
         "verification_json": str(evidence_file), "verification_options": options,
@@ -218,6 +290,8 @@ def run_skill_workflow(args, source, output_dir, report):
         report.errors.append({"stage": workflow.name, "message": workflow.error or "skill runner failed"})
         return report
     try:
+        if skill.is_symlink() or hashlib.sha256(skill.read_text(encoding="utf-8").encode("utf-8")).hexdigest() != skill_sha256:
+            raise ValueError("the LOGOS skill changed during generation")
         validate_contracts(contracts, source_text)
         if source.read_text(encoding="utf-8") != source_text:
             raise ValueError("skill changed the original input source")
