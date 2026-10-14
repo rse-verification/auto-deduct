@@ -97,6 +97,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
         self.assertIn("git -C /tmp/logos rev-parse HEAD > /opt/logos/REVISION", dockerfile)
         self.assertIn("rm -rf /tmp/logos", dockerfile)
         self.assertIn("--check-dependencies", dockerfile)
+        self.assertIn("ENV HOME=/home/dev", dockerfile)
         self.assertFalse((ROOT / "Dockerfiles/LogosDockerfile").exists())
         args = MODULE.parser().parse_args(["--mode", "llm", "--llm-runtime", "docker", "input.c"])
         self.assertEqual(args.llm_docker_image, "auto-deduct:latest")

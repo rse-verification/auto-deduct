@@ -298,6 +298,8 @@ RUN : "${LOGOS_REPO:?LOGOS_REPO must not be empty}" && \
 
 ENV AUTODEDUCT_LLM_SKILL=/opt/logos/skill/SKILL.md
 ENV AUTODEDUCT_CONTAINER=1
+# The host UID may have no passwd entry; keep Why3's configured prover location.
+ENV HOME=/home/dev
 
 USER dev
 RUN PYTHONPATH=/opt/logos/skill/scripts python3 -c \

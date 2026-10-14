@@ -9,6 +9,7 @@ import json
 import os
 import shlex
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -59,6 +60,16 @@ class LogosIntegrationTest(unittest.TestCase):
 @unittest.skipUnless(os.environ.get("AUTODEDUCT_RUN_LOGOS_DOCKER") == "1",
                      "set AUTODEDUCT_RUN_LOGOS_DOCKER=1 for host/Docker integration")
 class LogosDockerIntegrationTest(unittest.TestCase):
+    def test_configured_provers_are_visible_with_host_uid(self):
+        result = subprocess.run([
+            "docker", "run", "--rm", "--platform", "linux/amd64", "--network", "none",
+            "--read-only", "--user", f"{os.getuid()}:{os.getgid()}",
+            os.environ.get("AUTODEDUCT_IMAGE", "auto-deduct:latest"),
+            "why3", "config", "list-provers",
+        ], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.strip(), "Why3 cannot see the image's configured provers")
+
     def test_host_launcher_and_real_container_wrapper(self):
         for expected_result in (1, 2):
             with self.subTest(expected_result=expected_result), tempfile.TemporaryDirectory() as tmp:
