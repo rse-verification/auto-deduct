@@ -18,7 +18,7 @@ A separate package installation is unnecessary. Clone the branch and use its
 included executable:
 
 ```shell
-git clone --branch llm-skill-mode https://github.com/rse-verification/auto-deduct.git
+git clone --branch v2.0.0-rc.1 https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 ./bin/autodeduct --version
 ```
@@ -50,7 +50,7 @@ Saida, ISP, TriCera, Frama-C/WP, LOGOS and libclang. Choose the workflow when
 running AutoDeduct; a second image build or host LOGOS checkout is unnecessary.
 
 ```shell
-git clone --branch llm-skill-mode https://github.com/rse-verification/auto-deduct.git
+git clone --branch v2.0.0-rc.1 https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 docker build \
   -t auto-deduct:v2-rc \
