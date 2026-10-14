@@ -18,6 +18,10 @@ logs, and the final JSON report are written to a separate output directory.
 
 Start either mode from your terminal:
 
+The commands below assume the checkout's `bin/` directory is in your host's
+`PATH`. You can also use `./bin/autodeduct` from the repository root; see
+[host launcher setup](#make-autodeduct-available-on-the-host).
+
 ```shell
 autodeduct deductive path/to/program.c
 autodeduct llm --llm-skill /absolute/path/to/logos/skill/SKILL.md path/to/program.c
@@ -121,6 +125,36 @@ docker run --rm \
 On Apple Silicon, add `--platform linux/amd64` to both Docker commands.
 
 ## LLM Mode With LOGOS
+
+### Make AutoDeduct Available on the Host
+
+**Both `--llm-runtime local` and `--llm-runtime docker` require the AutoDeduct
+launcher on your computer.** A separate AutoDeduct package installation is
+unnecessary: clone this branch and use the executable included in the checkout.
+Installing only the Docker image is insufficient for LLM mode.
+
+```shell
+git clone --branch llm-skill-mode https://github.com/rse-verification/auto-deduct.git
+cd auto-deduct
+./bin/autodeduct --version
+```
+
+From that directory, run `./bin/autodeduct llm ...` directly. To use the shorter
+`autodeduct llm ...` command, add the checkout's `bin/` directory to your `PATH`:
+
+```shell
+export PATH="$PWD/bin:$PATH"
+autodeduct --version
+```
+
+This export applies to the current terminal session. To keep it for future
+sessions, add the absolute checkout `bin/` path to your shell's `PATH` setup.
+Both LLM runtimes also require host Python 3.10+, an installed and authenticated
+Codex CLI, and the configured local LOGOS skill checkout. Docker mode provides
+libclang, Frama-C/WP and provers inside the verifier image; local mode requires
+those dependencies on the host.
+
+### Configure LOGOS and Run
 
 LOGOS supplies the skill, contract renderer, and Frama-C WP evidence wrapper.
 AutoDeduct supplies the task and validates the generated artifacts and proof
