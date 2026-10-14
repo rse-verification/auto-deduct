@@ -8,7 +8,7 @@ import os
 
 from .stages import PipelineError
 
-VERSION = "1.1.0-rc.1"
+VERSION = "2.0.0-rc.1"
 
 PIPELINE_OWNED_OPTIONS = frozenset({
     "-main",
@@ -56,7 +56,7 @@ def validate_forwarded_options(args: argparse.Namespace) -> None:
                 )
 
 
-# Define the V1 command-line interface and its supported analysis options.
+# Define the command-line interface and its supported analysis options.
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="autodeduct",

@@ -1,4 +1,4 @@
-"""Pipeline orchestration: run the V1 stage sequence and the CLI entry point."""
+"""Pipeline orchestration for the deductive and LLM workflows and CLI entry point."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ from .stages import (
 )
 
 
-# Run the Saida/TriCera, ISP/Eva, contract-check, and WP stages in V1 order.
+# Run the deductive Saida/TriCera, ISP/Eva, contract-check, and WP stages.
 def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     output_dir = Path(args.output_dir).expanduser().resolve()
     requested_files = []

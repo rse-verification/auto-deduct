@@ -23,7 +23,7 @@ This is a living document describing the target for each AutoDeduct release.
   otherwise it returns `FAILED` with stage-specific diagnostics.
 - The input source remains unchanged.
 
-## AutoDeduct 1.1 “Double Ducks” — release candidate
+## AutoDeduct V2 “Double Ducks” — release candidate
 
 - Add explicit `deductive` and `llm` mode commands while keeping existing flags.
 - Use host Codex/LOGOS for contract generation, followed by launcher-owned
@@ -36,6 +36,8 @@ This is a living document describing the target for each AutoDeduct release.
 Complete native host verification and native Windows Frama-C qualification
 remain open. The LLM workflow remains experimental and does not provide the
 traditional ISP helper-coverage check.
+Its C/ACSL feature coverage and contract-generation reliability remain under
+investigation; see the [mode-specific limitations](docs/LIMITATIONS.md).
 
 ## Future Releases
 

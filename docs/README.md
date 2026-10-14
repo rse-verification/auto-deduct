@@ -1,4 +1,4 @@
-# Documentation
+# AutoDeduct V2 documentation
 
 Start with setup, then choose a usage guide.
 
@@ -9,7 +9,7 @@ Start with setup, then choose a usage guide.
 | [LLM setup and usage](LLM.md) | Host Codex + LOGOS setup, local/Docker verification, JSON handoff and LLM troubleshooting |
 | [Common usage](USAGE.md) | Shared CLI options, input/output rules and exit status |
 | [Pipeline and diagnostics](PIPELINE.md) | Stages, success criteria, evidence checks and interpreting failures |
-| [Limitations](LIMITATIONS.md) | Supported C/ACSL shape, inference boundaries and proof assumptions |
+| [Limitations](LIMITATIONS.md) | Shared proof requirements, deductive inference boundaries and LLM coverage under investigation |
 | [Release roadmap](../Roadmap.md) | Release targets and remaining qualification work |
 
 The [project README](../README.md) summarizes modes and where they execute.

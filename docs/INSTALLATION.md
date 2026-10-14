@@ -53,7 +53,7 @@ running AutoDeduct; a second image build or host LOGOS checkout is unnecessary.
 git clone --branch llm-skill-mode https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 docker build \
-  -t auto-deduct:1.1-rc \
+  -t auto-deduct:v2-rc \
   -t auto-deduct:latest \
   -f Dockerfiles/AutoDeductDockerfile .
 ```

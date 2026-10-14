@@ -1,4 +1,4 @@
-# AutoDeduct 1.1 “Double Ducks” — release candidate
+# AutoDeduct V2 “Double Ducks” — release candidate
 
 AutoDeduct generates contracts for C programs and checks them with Frama-C WP.
 It accepts one C translation unit and its headers. Generated source, logs and

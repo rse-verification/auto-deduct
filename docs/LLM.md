@@ -224,7 +224,8 @@ include/macro options are forwarded to verification, not to libclang's annotatio
 parser. Native end-to-end host verification remains unqualified in this branch;
 Docker verification has been checked with real WP. Proof success is relative
 to the supplied contracts and assumptions, not proof that the LLM captured all
-intended requirements. See [limitations](LIMITATIONS.md).
+intended requirements. LLM feature coverage and generation reliability remain
+under investigation; see [LLM limitations](LIMITATIONS.md#llm-mode-coverage-under-investigation).
 
 ## Offline integration check
 
