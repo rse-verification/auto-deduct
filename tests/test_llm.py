@@ -18,7 +18,12 @@ ANNOTATED = "/*@ assigns \\nothing; ensures \\result == 1; */\n" + SOURCE
 
 
 class LLMModeTests(unittest.TestCase):
-    def exercise(self, failure=None, wp="Proved goals: 2 / 2\n", runner="codex exec"):
+    def setUp(self):
+        guard = patch("autodeduct_pipeline.llm.in_container", return_value=False)
+        guard.start()
+        self.addCleanup(guard.stop)
+
+    def exercise(self, failure=None, wp="Proved goals: 2 / 2\n", runner="codex exec", runtime="local"):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             source = root / "src" / "input.c"
@@ -26,37 +31,58 @@ class LLMModeTests(unittest.TestCase):
             source.write_text(SOURCE)
             skill = root / "SKILL.md"
             skill.write_text("Use the test contract skill and its verifier.")
+            (root / "scripts").mkdir()
+            (root / "scripts/generate_acsl.py").write_text("# test wrapper")
             output = root / "output"
             output.mkdir()
             for artifact in ("llm-verification.json", "llm-contracts.json", "inferred.c"):
                 (output / artifact).write_text("stale")
             args = parser().parse_args([
                 "--mode", "llm", "--llm-skill", str(skill), "--llm-runner", runner,
+                "--llm-runtime", runtime,
                 "--wp-rte", "--wp-option=-wp-prover=qed", "--output-dir", str(output), str(source),
             ])
             commands = []
 
             def fake_run(command, **kwargs):
                 commands.append(command)
-                self.assertEqual(command[:2], ["codex", "exec"])
-                self.assertEqual("--sandbox" in command, "--approve-for-me" not in command)
-                self.assertIn(str(skill), command[-1])
-                self.assertIn("complete SKILL.md", command[-1])
-                self.assertIn("--verify", command[-1])
-                self.assertIn("--verification-json", command[-1])
-                for artifact in ("llm-verification.json", "llm-contracts.json", "inferred.c"):
-                    self.assertFalse((output / artifact).exists())
-                if failure == "runner":
-                    return subprocess.CompletedProcess(command, 1, "", "agent unavailable")
-                if failure == "missing":
-                    return subprocess.CompletedProcess(command, 0, "claimed success", "")
                 task = json.loads((output / "llm-task.json").read_text())
+                self.assertEqual(task["workflow"], "generate-only")
                 self.assertIn("-wp-rte", task["verification_options"])
                 self.assertIn("-wp-prover=qed", task["verification_options"])
-                (output / "llm-contracts.json").write_text(json.dumps({
-                    "format": "acsl-contracts-v2", "contracts": {"helper": {}},
-                    "metadata": {"source_sha256": hashlib.sha256(SOURCE.encode()).hexdigest()},
-                }))
+                if len(commands) == 1:
+                    self.assertEqual(command[:2], ["codex", "exec"])
+                    self.assertEqual("--sandbox" in command, "--approve-for-me" not in command)
+                    self.assertIn(str(skill), command[-1])
+                    self.assertIn("complete SKILL.md", command[-1])
+                    self.assertIn("generate-only", command[-1])
+                    for artifact in ("llm-verification.json", "llm-contracts.json", "inferred.c"):
+                        self.assertFalse((output / artifact).exists())
+                    if failure == "runner":
+                        return subprocess.CompletedProcess(command, 1, "", "agent unavailable")
+                    if failure != "missing":
+                        (output / "llm-contracts.json").write_text(json.dumps({
+                            "format": "acsl-contracts-v2", "contracts": {"helper": {}},
+                            "metadata": {"source_sha256": hashlib.sha256(SOURCE.encode()).hexdigest()},
+                        }))
+                    if failure == "agent_evidence":
+                        (output / "llm-verification.json").write_text("{}")
+                    return subprocess.CompletedProcess(command, 0, "generated contracts", "")
+                if runtime == "docker":
+                    self.assertEqual(command[:2], ["docker", "run"])
+                    self.assertIn("--read-only", command)
+                    self.assertEqual(command[command.index("--network") + 1], "none")
+                    self.assertIn(f"type=bind,source={source.parent},target={source.parent},readonly", command)
+                    self.assertIn(f"type=bind,source={output},target={output}", command)
+                    self.assertIn("/opt/logos/skill/scripts/generate_acsl.py", command)
+                    self.assertNotIn("--privileged", command)
+                    self.assertFalse(any(".codex" in word or "docker.sock" in word for word in command))
+                    if failure == "timeout":
+                        raise subprocess.TimeoutExpired(command, 1)
+                else:
+                    self.assertEqual(command[:2], [sys.executable, str(root / "scripts/generate_acsl.py")])
+                self.assertIn("--verify", command)
+                self.assertIn("--verification-json", command)
                 content = ANNOTATED.replace("return 1;", "return 2;") if failure == "changed" else ANNOTATED
                 (output / "inferred.c").write_text(content)
                 evidence = {
@@ -74,28 +100,41 @@ class LLMModeTests(unittest.TestCase):
                 (output / "llm-verification.json").write_text(
                     "invalid json" if failure == "json" else json.dumps(evidence)
                 )
-                return subprocess.CompletedProcess(command, 0, "agent finished", "")
+                return subprocess.CompletedProcess(command, 1 if failure == "wrapper_exit" else 0, "wrapper finished", "")
 
-            # No local Frama-C or TriCera is required: the skill owns execution.
-            with patch("autodeduct_pipeline.pipeline.shutil.which", return_value=None), patch(
+            with patch("autodeduct_pipeline.llm.in_container", return_value=False), patch(
+                "autodeduct_pipeline.llm.shutil.which", return_value="docker" if runtime == "docker" else None
+            ), patch(
                 "autodeduct_pipeline.stages._run_command", side_effect=fake_run
-            ):
+            ), patch("autodeduct_pipeline.llm.subprocess.run") as cleanup:
                 report = run_pipeline(args)
+                if failure == "timeout":
+                    self.assertEqual(cleanup.call_args.args[0][:3], ["docker", "rm", "--force"])
             self.assertEqual(source.read_text(), SOURCE)
             self.assertIsNone(report.contract_report)
             self.assertEqual(report.mode, "llm")
-            self.assertEqual(len(commands), 1)
+            self.assertEqual(len(commands), 1 if failure in {"runner", "missing", "agent_evidence"} else 2)
             return report
 
-    def test_skill_handles_generation_and_verification_once(self):
+    def test_host_generation_and_explicit_verification(self):
         for runner in ("codex exec", "codex exec --approve-for-me"):
             with self.subTest(runner=runner):
                 report = self.exercise(runner=runner)
                 self.assertEqual(report.status, "passed", report.errors)
-                self.assertEqual([stage.name for stage in report.stages], ["llm_workflow", "skill_verify"])
+                self.assertEqual([stage.name for stage in report.stages], ["llm_workflow", "logos_verify", "skill_verify"])
+
+    def test_docker_runtime_keeps_agent_on_host(self):
+        report = self.exercise(runtime="docker")
+        self.assertEqual(report.status, "passed", report.errors)
+
+    def test_docker_timeout_stops_verifier_container(self):
+        report = self.exercise(runtime="docker", failure="timeout")
+        self.assertEqual(report.status, "failed")
+        self.assertEqual(report.stages[-1].status, "timeout")
+        self.assertEqual(report.errors[-1]["stage"], "logos_verify")
 
     def test_invalid_results_and_changed_source_never_pass(self):
-        for failure in ("runner", "missing", "json", "hash", "verifier", "changed", "options", "malformed"):
+        for failure in ("runner", "missing", "agent_evidence", "wrapper_exit", "json", "hash", "verifier", "changed", "options", "malformed"):
             with self.subTest(failure=failure):
                 report = self.exercise(failure=failure)
                 self.assertEqual(report.status, "failed")
@@ -123,6 +162,8 @@ class LLMModeTests(unittest.TestCase):
             root = Path(directory).resolve()
             skill = root / "SKILL.md"
             skill.write_text("test skill")
+            (root / "scripts").mkdir()
+            (root / "scripts/generate_acsl.py").write_text("# test wrapper")
             output = root / "output"
             output.mkdir()
             args = parser().parse_args(["--mode", "llm", "--llm-skill", str(skill), "input.c"])
@@ -134,6 +175,18 @@ class LLMModeTests(unittest.TestCase):
             with self.assertRaises(PipelineError):
                 validate_llm_options(args, output)
             self.assertEqual(runner.read_text(), "keep me")
+
+    def test_container_launch_is_rejected_before_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory).resolve()
+            artifact = output / "llm-contracts.json"
+            artifact.write_text("keep me")
+            args = parser().parse_args(["--mode", "llm", "--output-dir", str(output), "/unrelated/input.c"])
+            with patch("autodeduct_pipeline.llm.in_container", return_value=True), self.assertRaisesRegex(
+                PipelineError, "must be launched on the host"
+            ):
+                run_pipeline(args)
+            self.assertEqual(artifact.read_text(), "keep me")
 
     def test_old_contracts_option_is_removed(self):
         with self.assertRaises(SystemExit):

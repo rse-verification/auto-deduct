@@ -34,6 +34,8 @@ IGNORED_SOURCE_DIRECTORIES = frozenset({
 })
 SUPPORTED_SOURCE_SUFFIXES = frozenset({".c"})
 GENERATED_OUTPUT_NAMES = frozenset({
+    "logos_verify.stdout.log",
+    "logos_verify.stderr.log",
     "llm-task.json",
     "llm-final.txt",
     "llm-verification.json",

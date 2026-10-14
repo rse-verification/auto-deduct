@@ -21,7 +21,8 @@ also owns reachable-function and missing-contract semantics; AutoDeduct reads
 its JSON report rather than reimplementing the call graph.
 
 With `--mode llm`, `llm_workflow` invokes Codex with the configured SKILL.md
-and delegates generation, annotation, and verification to that skill's tools.
+and a generation-only task on the host. `logos_verify` explicitly invokes the
+LOGOS Python wrapper locally or inside Docker for annotation and verification.
 `skill_verify` validates the returned WP evidence without rerunning WP.
 AutoDeduct checks source hashes, annotation-only changes, the requested
 verification options, and complete nonzero proof goals. Saida/TriCera,
@@ -57,8 +58,9 @@ In deterministic mode, AutoDeduct returns exit code `0` only when:
 4. ISP reports no reachable helper function with a missing contract; and
 5. WP reports proof goals and proves all of them.
 
-In LLM mode, the skill must finish and return source-matched contract JSON,
-annotation-only output, and a matching verifier report with all requested
+In LLM mode, the host skill must return source-matched contract JSON, and the
+LOGOS wrapper must finish with annotation-only output and a verifier report
+with all requested
 options and complete nonzero WP goals. The result does not include the
 deterministic mode's reachable-helper coverage guarantee.
 

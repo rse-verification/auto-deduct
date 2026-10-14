@@ -9,12 +9,16 @@ separate output directory and does not edit the source project.
 ```text
 autodeduct --help
 autodeduct --version
+autodeduct deductive [options] SOURCE_OR_DIRECTORY
+autodeduct llm [options] SOURCE_OR_DIRECTORY
 autodeduct [options] SOURCE_OR_DIRECTORY [SOURCE_OR_DIRECTORY ...]
 ```
 
 Common options:
 
 - `--mode deterministic|llm`: contract-generation path; default is deterministic.
+  These flags are alternatives to the `deductive` and `llm` command names;
+  choose one form. Reports retain `mode: "deterministic"` for the deductive mode.
 - `--entry-point NAME`: contracted entry function; default is `main`.
 - `--output-dir DIRECTORY`: generated files and logs; default is
   `autodeduct-output`.
@@ -30,55 +34,52 @@ arguments.
 
 ## LLM Mode
 
-This experimental mode delegates generation and verification to
-[LOGOS](https://github.com/rse-verification/logos). Use the compatible revision
-and native or Docker setup in [Installation](INSTALLATION.md#logos-for-llm-mode).
-LOGOS implements the evidence interface below.
-
-Configure the local LOGOS skill once (the LOGOS Docker image sets this automatically):
+LLM mode uses the [LOGOS](https://github.com/rse-verification/logos) skill for
+host Codex contract generation. AutoDeduct explicitly invokes the LOGOS Python
+wrapper afterwards to annotate and verify; the model does not run verification.
+See [Installation](INSTALLATION.md#logos-for-llm-mode) for the compatible revision.
 
 ```shell
 export AUTODEDUCT_LLM_SKILL=/absolute/path/to/logos/skill/SKILL.md
-autodeduct --mode llm --timeout 1200 --output-dir /tmp/proof-run src/main.c
+# Fully local; Python/libclang/Frama-C/WP/provers and Codex on the host:
+autodeduct llm --llm-runtime local --timeout 1200 --output-dir /tmp/proof-run path/to/program.c
+# Host Python/Codex, wrapper and verification tools in Docker:
+autodeduct llm --llm-runtime docker --timeout 1200 --output-dir /tmp/proof-run path/to/program.c
 ```
 
-The same path can be passed as `--llm-skill SKILL_MD`.
-In LLM mode, `--timeout` limits the entire external skill workflow, including
-model calls and verification. The default 300 seconds may be too short for
-larger inputs; `--wp-option=-wp-timeout=30` separately sets WP's prover timeout.
-AutoDeduct invokes `codex exec`, explicitly instructs it to read that
-SKILL.md, and requests the complete generation, annotation, and verification
-workflow. The skill's repository owns the contract semantics, rendering, WP
-execution, and its text/PDF reports. AutoDeduct does not run a second WP pass,
-Saida/TriCera, or ISP/Eva in this mode. Contract JSON is an internal artifact;
-there is no public `--contracts` option.
+`local` is the default. Docker is optional and never started automatically by
+selecting LLM mode alone. `--llm-skill SKILL_MD` overrides the skill environment
+variable. Global skill installation is unnecessary; the complete skill directory
+must be readable on the host. Build the Docker image from that same checkout.
+Running LLM mode sends source/specifications to the configured Codex model.
 
-Native runs require an installed, authenticated Codex CLI, Python, libclang,
-Frama-C WP, and configured provers. The optional LOGOS Docker image bundles
-the runtime dependencies and skill from a local checkout; authenticate Codex
-at runtime. The complete skill directory must be readable by the runner;
-global skill installation is unnecessary because AutoDeduct supplies its path.
-Running LLM mode gives the configured Codex model access to the skill and
-input source. Use an account/environment approved for those files.
+`--timeout` limits each external stage independently (host generation and wrapper
+verification). `--wp-option=-wp-timeout=30` sets WP's individual prover timeout.
+Saida/TriCera, ISP/Eva and their helper-coverage check do not run in LLM mode.
 
-The default runner is `codex exec`. Override it with
-`--llm-runner COMMAND` or `AUTODEDUCT_LLM_RUNNER` for a configured
-Codex profile. Commands execute without a shell. Absolute script paths are
-required; no credentials should be placed in the command string because it
-is retained in the report. AutoDeduct requests a workspace-write sandbox
-rooted at the output directory. A configured `--approve-for-me` runner
-uses that mode's own workspace-write policy. Permissions are not bypassed;
-missing tools or denied actions fail the run.
+`--llm-docker-image IMAGE` selects the verifier image (default `auto-deduct:logos`).
+`--llm-docker-platform PLATFORM` selects its platform (default `linux/amd64`).
+Docker mode supports Linux/macOS and Windows through WSL. Launching the Codex
+workflow inside a container is unsupported and rejected. Codex uses the host
+login; no authentication or model credentials are mounted into the verifier.
 
-See the official [non-interactive Codex documentation](https://learn.chatgpt.com/docs/non-interactive-mode)
-and [skills documentation](https://learn.chatgpt.com/docs/build-skills).
+The default host runner is `codex exec`. `--llm-runner COMMAND` or
+`AUTODEDUCT_LLM_RUNNER` can select a Codex profile. These commands receive
+Codex-specific arguments; other agents or model APIs need an adapter. Commands
+execute without a shell; script paths must be absolute. Do not put credentials
+in the command because it is retained in the report. Codex uses a workspace-write
+sandbox rooted at the output directory; `--approve-for-me` uses its own automatic
+approval policy. The agent writes contract JSON only. Docker is invoked by the
+launcher after the agent exits, outside the agent's sandbox.
 
 ### Workflow and evidence
 
 AutoDeduct writes `llm-task.json` with absolute paths for the input,
 contract JSON, annotated C, verification JSON, and requested verification
-options. Codex reads the actual configured skill and uses its repository's
-wrapper with `--verify --verification-json FILE`. Each requested
+options, with `workflow: "generate-only"`. Codex reads the skill and writes only
+contract JSON with the matching source hash. AutoDeduct validates that JSON,
+then invokes the wrapper locally or inside Docker with
+`--verify --verification-json FILE`. Each requested
 verification option is forwarded using `--frama-c-option=VALUE`.
 This includes entry point, include paths, WP options, and `--wp-rte`.
 
@@ -102,12 +103,12 @@ and the proof outcome in `verified`. Its wrapper returns nonzero for incomplete,
 missing, or zero-goal summaries, even when Frama-C itself exits zero.
 Older LOGOS revisions without these CLI/report options are incompatible.
 
-AutoDeduct records `llm_workflow` (the skill execution) and
-`skill_verify` (inspection of its evidence, not another proof run).
+AutoDeduct records `llm_workflow` (host contract generation), `logos_verify`
+(wrapper annotation and verification) and `skill_verify` (evidence validation).
 It checks source/contract hashes, annotation-only changes, the reported
 verification command, the process return code, and complete nonzero WP
 goals. A successful agent exit or a prose claim alone cannot pass the run.
-The skill and its verifier remain trusted components; a JSON report is
+The LOGOS wrapper and its verifier remain trusted components; a JSON report is
 verification evidence, not a cryptographically certified proof.
 
 The run directory contains `llm-task.json`, `llm-contracts.json`,

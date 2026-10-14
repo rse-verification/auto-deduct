@@ -18,6 +18,29 @@ STAGES = import_module("autodeduct_pipeline.stages")
 
 
 class AutoDeductPipelineTests(unittest.TestCase):
+    def test_mode_commands_dispatch_and_preserve_existing_cli(self):
+        for words, expected in (
+            (["llm", "input.c"], "llm"),
+            (["deductive", "input.c"], "deterministic"),
+            (["--mode", "llm", "input.c"], "llm"),
+            (["input.c"], "deterministic"),
+            (["./llm"], "deterministic"),
+        ):
+            with self.subTest(arguments=words), patch(
+                "autodeduct_pipeline.pipeline.run_pipeline",
+                side_effect=MODULE.PipelineError("input", "test dispatch"),
+            ) as run, patch("autodeduct_pipeline.pipeline.print_human_report"):
+                self.assertEqual(MODULE.main(words), 1)
+                self.assertEqual(run.call_args.args[0].mode, expected)
+                self.assertEqual(run.call_args.args[0].sources, [words[-1]])
+        for words in (
+            ["llm", "--mode", "deterministic", "input.c"],
+            ["deductive", "--mode=llm", "input.c"],
+        ):
+            with self.subTest(arguments=words), self.assertRaises(SystemExit) as error:
+                MODULE.main(words)
+            self.assertEqual(error.exception.code, 2)
+
     def test_report_serialization_has_a_versioned_top_level_contract(self):
         report = MODULE.PipelineReport(
             version="1.0.0",

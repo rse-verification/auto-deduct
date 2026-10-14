@@ -6,27 +6,25 @@ ARG AUTODEDUCT_IMAGE=auto-deduct:latest
 FROM ${AUTODEDUCT_IMAGE}
 
 USER root
-ARG CODEX_VERSION=0.162.1
 ARG LOGOS_REV=local-checkout
 LABEL org.opencontainers.image.logos.source="https://github.com/rse-verification/logos" \
       org.opencontainers.image.logos.revision="${LOGOS_REV}"
 
 RUN apt-get update && \
-    apt-get install --yes --no-install-recommends libclang-dev nodejs npm && \
-    npm install --global "@openai/codex@${CODEX_VERSION}" && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install --yes --no-install-recommends libclang-dev && \
+    rm -rf /var/lib/apt/lists/* && \
+    chmod o+rx /home/dev
 
 # Only the runtime skill is copied; Git credentials and repository history stay on the host.
 COPY --from=logos /skill /opt/logos/skill
 COPY --chmod=0755 bin/autodeduct /usr/local/bin/autodeduct
 COPY --chmod=0755 bin/autodeduct_pipeline /usr/local/bin/autodeduct_pipeline
 ENV AUTODEDUCT_LLM_SKILL=/opt/logos/skill/SKILL.md
+ENV AUTODEDUCT_CONTAINER=1
 
 USER dev
-RUN mkdir -p /home/dev/.codex && \
-    PYTHONPATH=/opt/logos/skill/scripts python3 -c \
+RUN PYTHONPATH=/opt/logos/skill/scripts python3 -c \
       'from acsl_tool.parser import extract_functions; assert extract_functions("static inline int helper(void) { return 1; }")[0].name == "helper"' && \
-    python3 /opt/logos/skill/scripts/generate_acsl.py --help | grep -- --verification-json && \
-    codex --version
+    python3 /opt/logos/skill/scripts/generate_acsl.py --help | grep -- --verification-json
 
 WORKDIR /home/dev

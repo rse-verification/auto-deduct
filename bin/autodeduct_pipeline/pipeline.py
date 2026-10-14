@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Sequence
@@ -268,7 +269,15 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
 
 # Parse arguments, convert failures into reports, and return a CI-friendly exit code.
 def main(argv: Sequence[str] | None = None) -> int:
-    args = parser().parse_args(argv)
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    cli = parser()
+    if arguments and arguments[0] in {"llm", "deductive"}:
+        mode = {"llm": "llm", "deductive": "deterministic"}[arguments.pop(0)]
+        options = arguments[:arguments.index("--")] if "--" in arguments else arguments
+        if any(word == "--mode" or word.startswith("--mode=") for word in options):
+            cli.error("choose a mode command or --mode, not both")
+        arguments[:0] = ["--mode", mode]
+    args = cli.parse_args(arguments)
     try:
         report = run_pipeline(args)
     except PipelineError as error:

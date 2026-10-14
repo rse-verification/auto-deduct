@@ -4,15 +4,70 @@ AutoDeduct 1.1, proposed codename "Double Ducks", is a command-line
 formal-verification pipeline for C programs.
 It combines Frama-C, Saida, TriCera, ISP/Eva, and WP to infer contracts and
 auxiliary annotations, then checks whether the selected input can be proved.
-The default `--mode deterministic` retains that pipeline. The experimental
-`--mode llm` uses [LOGOS: LLM-Based Generation of Function Contracts for C](https://github.com/rse-verification/logos)
-through its Codex skill for the entire
-generation and verification workflow, without Saida/TriCera, ISP/Eva,
+The default `autodeduct deductive` mode retains that pipeline. The experimental
+`autodeduct llm` mode uses [LOGOS: LLM-Based Generation of Function Contracts for C](https://github.com/rse-verification/logos)
+through a host Codex agent for contract generation and the LOGOS Python
+wrapper for annotation and verification, without Saida/TriCera, ISP/Eva,
 or the ISP reachable-helper check. AutoDeduct validates its proof report.
 See [LLM mode setup](docs/USAGE.md#llm-mode).
 
 AutoDeduct never changes the input source. Generated C files, diagnostics,
 logs, and the final JSON report are written to a separate output directory.
+
+## Choose a Mode and Execution Environment
+
+Start either mode from your terminal:
+
+```shell
+autodeduct deductive path/to/program.c
+autodeduct llm --llm-skill /absolute/path/to/logos/skill/SKILL.md path/to/program.c
+```
+
+These commands select how contracts are generated. Both modes use Frama-C WP
+to verify them. `deductive` names the traditional Saida/TriCera/ISP/Eva pipeline;
+`llm` names generation through LOGOS and an LLM agent. The existing
+`--mode deterministic` and `--mode llm` flags remain supported. Without a mode,
+AutoDeduct uses the traditional pipeline. Use `./llm` or `./deductive` for input
+directories with those names.
+
+The command runs wherever you launch it. `autodeduct ...` uses your local
+installation; `docker run ... autodeduct ...` executes AutoDeduct inside Docker.
+Choosing LLM mode does not automatically start Docker.
+
+| Setup | On your computer | Inside Docker | Current status |
+| --- | --- | --- | --- |
+| Deductive with Docker | Docker client | Entire traditional pipeline | Packaged setup |
+| Deductive without Docker | AutoDeduct and all traditional verification tools | Nothing | Requires compatible native dependencies |
+| LLM without Docker | Python, AutoDeduct, authenticated Codex CLI, LOGOS, libclang, Frama-C/WP and provers | Nothing | Native CLI available; complete native setup not yet validated end to end |
+| LLM with Docker | Python, AutoDeduct launcher and authenticated Codex CLI | LOGOS Python wrapper, libclang, Frama-C/WP and provers | Use `--llm-runtime docker` on the host |
+| LLM entirely inside Docker | — | — | Unsupported |
+
+Docker is optional for both modes when their dependencies are installed locally.
+The current LLM integration requires Codex. `--llm-runner` configures a Codex
+command/profile and still receives Codex-specific arguments; it does not make
+arbitrary agents or model APIs interchangeable. Other LLMs need an adapter to
+produce the same LOGOS contract JSON and invoke its verification wrapper.
+
+### Why Use a Local Launcher for LLM With Docker?
+
+Codex runs on your computer using your local login. Running Codex inside Docker
+is unsupported by AutoDeduct: our trials failed during namespace and syscall-filter
+initialization, and container authentication would require separate setup.
+The LOGOS verifier image contains no Codex or model credentials. See the official
+[sandbox guidance](https://learn.chatgpt.com/docs/agent-approvals-security).
+
+`autodeduct llm` is the local Python launcher. It reads the input and prepares
+`llm-task.json`, runs host Codex to write contract JSON, then explicitly invokes
+the LOGOS wrapper. With `--llm-runtime docker`, that wrapper runs inside Docker
+and uses the shared output folder to return annotated C, WP evidence, and text/PDF
+reports. AutoDeduct validates the evidence and writes `report.json`. Codex does
+not need permission to access Docker; the launcher starts the verifier itself.
+
+The host needs Python 3.10+, an authenticated Codex CLI, and a local LOGOS skill
+checkout. Docker mode additionally needs Docker and the LOGOS verifier image;
+libclang and Frama-C are installed in the image. Local mode needs those tools
+on the host and does not use Docker. Docker mode supports Linux/macOS and Windows
+through WSL. Native Windows Frama-C verification remains unvalidated.
 
 ## Pipeline
 
@@ -60,7 +115,7 @@ docker run --rm \
   -v "$PWD":/work \
   -w /work \
   auto-deduct:latest \
-  autodeduct --entry-point main examples/ase-2024
+  autodeduct deductive --entry-point main examples/ase-2024
 ```
 
 On Apple Silicon, add `--platform linux/amd64` to both Docker commands.
@@ -72,19 +127,31 @@ AutoDeduct supplies the task and validates the generated artifacts and proof
 evidence. Use a LOGOS revision supporting `--verification-json` and repeated
 `--frama-c-option` arguments; earlier revisions are incompatible.
 
-The optional `Dockerfiles/LogosDockerfile` adds the LOGOS skill, libclang,
-and a pinned Codex CLI to the standard image. It accepts your local LOGOS
-checkout as a Docker named build context, so private Git credentials stay
-outside the image. See [LOGOS installation and Docker setup](docs/INSTALLATION.md#logos-for-llm-mode)
-for the compatible revision, build commands, and runtime login.
+`Dockerfiles/LogosDockerfile` packages the LOGOS wrapper and libclang on top of
+the standard verifier image. It copies your local LOGOS checkout using a Docker
+named build context. It installs no Codex and uses no model login volume.
+See [installation](docs/INSTALLATION.md#logos-for-llm-mode) for the compatible
+LOGOS revision, host setup and image build.
 
-For an existing native installation:
+Run from the host with Docker verification:
 
 ```shell
 export AUTODEDUCT_LLM_SKILL="/absolute/path/to/logos/skill/SKILL.md"
-./bin/autodeduct --mode llm --timeout 1200 \
-  --output-dir /tmp/logos-proof src/main.c
+./bin/autodeduct llm --llm-runtime docker --timeout 1200 \
+  --output-dir /tmp/logos-proof path/to/program.c
 ```
+
+Or run without Docker, with local verification dependencies installed:
+
+```shell
+./bin/autodeduct llm --llm-runtime local --timeout 1200 \
+  --output-dir /tmp/logos-proof path/to/program.c
+```
+
+`local` is the default; Docker is never started implicitly. In Docker mode,
+source/header directories are mounted read-only, only the output folder is
+writable, and the verifier container has no network access. Existing images
+must be rebuilt for the new launcher and generation-only skill protocol.
 
 The full skill directory must be readable; global skill registration is not
 required. LOGOS currently expects existing ACSL in the input and generates
@@ -98,7 +165,7 @@ and the WP provers.
 
 ```shell
 export PATH="$PWD/bin:$PATH"
-autodeduct \
+autodeduct deductive \
   --entry-point main \
   --output-dir autodeduct-output \
   examples/ase-2024

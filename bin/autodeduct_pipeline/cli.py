@@ -60,14 +60,19 @@ def validate_forwarded_options(args: argparse.Namespace) -> None:
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="autodeduct",
+        usage="%(prog)s [llm|deductive] [options] SOURCE_OR_DIRECTORY",
         description=(
-            "Run deterministic contract inference and WP, or delegate generation "
-            "and verification to a configured Codex skill."
+            "Use 'deductive' for Saida/TriCera/ISP/Eva inference and WP, "
+            "or 'llm' for the LOGOS skill workflow through Codex. "
+            "Both modes verify contracts with WP."
         ),
     )
     result.add_argument("--version", action="version", version=f"AutoDeduct {VERSION}")
     result.add_argument("--json", action="store_true", help="print the final report as JSON")
-    result.add_argument("--mode", choices=("deterministic", "llm"), default="deterministic")
+    result.add_argument(
+        "--mode", choices=("deterministic", "llm"), default="deterministic",
+        help="alternative to the llm/deductive command; default: deterministic",
+    )
     result.add_argument(
         "--llm-skill", default=os.environ.get("AUTODEDUCT_LLM_SKILL"),
         metavar="SKILL_MD", help="local skill workflow (or AUTODEDUCT_LLM_SKILL)",
@@ -75,6 +80,18 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--llm-runner", default=os.environ.get("AUTODEDUCT_LLM_RUNNER", "codex exec"),
         metavar="COMMAND", help="Codex exec command (or AUTODEDUCT_LLM_RUNNER; default: codex exec)",
+    )
+    result.add_argument(
+        "--llm-runtime", choices=("local", "docker"), default="local",
+        help="run the LOGOS wrapper locally or in Docker; Codex always runs on the host (default: local)",
+    )
+    result.add_argument(
+        "--llm-docker-image", default="auto-deduct:logos", metavar="IMAGE",
+        help="LOGOS verifier image for --llm-runtime docker (default: %(default)s)",
+    )
+    result.add_argument(
+        "--llm-docker-platform", default="linux/amd64", metavar="PLATFORM",
+        help="verifier image platform (default: %(default)s)",
     )
     result.add_argument(
         "--output-dir",

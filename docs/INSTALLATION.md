@@ -118,10 +118,10 @@ not already installed.
 ## LOGOS for LLM Mode
 
 Repository: [rse-verification/logos](https://github.com/rse-verification/logos).
-Compatible integration revision: `00251df7eb8e11aa7a0ef3747e57b647057868f2`.
-This revision adds the evidence/options interface required by AutoDeduct's
-`llm-skill-mode` branch and rejects incomplete WP proofs. The earlier
-libclang-only fix does not implement that interface.
+Compatible integration revision: `2bd60124a499373cfc7a90fa3a226225758db993`.
+This revision supports the generation-only task used by the host launcher,
+plus the evidence/options interface and rejection of incomplete WP proofs.
+It is available on LOGOS branch `llm-host-runtime`.
 
 Clone LOGOS alongside AutoDeduct using your normal GitHub authentication
 (repository access is required while LOGOS is private):
@@ -129,18 +129,44 @@ Clone LOGOS alongside AutoDeduct using your normal GitHub authentication
 ```shell
 # From the AutoDeduct repository root:
 git clone https://github.com/rse-verification/logos.git ../logos
-git -C ../logos checkout 00251df7eb8e11aa7a0ef3747e57b647057868f2
+git -C ../logos checkout 2bd60124a499373cfc7a90fa3a226225758db993
 ```
 
-For native use, follow LOGOS's prerequisites, install/authenticate
-[Codex CLI](https://learn.chatgpt.com/docs/cli), and set
-`AUTODEDUCT_LLM_SKILL` to the absolute path of `../logos/skill/SKILL.md`.
-No global skill registration is required. The whole skill directory and its
-scripts must be readable by the runner.
+### Host Setup (Both LLM Runtimes)
 
-### Build the LOGOS Docker image
+Install Python 3.10+ and an authenticated
+[Codex CLI](https://learn.chatgpt.com/docs/cli) on your computer. Run `codex login`
+on the host, then check `codex --version`. Clone the compatible LOGOS revision
+above and set its skill path:
 
-Build the standard `auto-deduct:latest` image first, as above. Then:
+```shell
+export AUTODEDUCT_LLM_SKILL="$(cd ../logos && pwd)/skill/SKILL.md"
+export PATH="$PWD/bin:$PATH"
+```
+
+Global skill registration is unnecessary. The host agent reads the local skill
+and source and produces contract JSON. AutoDeduct then runs the LOGOS wrapper
+and checks its proof evidence. The current adapter requires Codex; other agents
+or direct model APIs are not interchangeable through `--llm-runner`.
+
+### Without Docker
+
+Follow LOGOS's libclang prerequisites, install Frama-C/WP and configure its
+provers locally. Then:
+
+```shell
+autodeduct llm --llm-runtime local --timeout 1200 \
+  --output-dir /tmp/logos-proof path/to/program.c
+```
+
+Local execution is the default and needs no Docker. Full native verification
+on Windows is unvalidated; use WSL for the Linux verification toolchain.
+
+### With Docker Verification
+
+Install/start Docker and build the standard `auto-deduct:latest` image first,
+as above. Then build the verifier image from the same LOGOS revision as the
+host checkout:
 
 ```shell
 docker build \
@@ -149,59 +175,42 @@ docker build \
   -t auto-deduct:logos -f Dockerfiles/LogosDockerfile .
 ```
 
-Use Docker with BuildKit/named build context support. The named context is
-required and must point to the LOGOS repository root. Only `skill/` is copied
-to `/opt/logos/skill`, including its GPL-2.0-only `LICENSE`; no Git credentials are passed to the build. Check out
-the chosen revision before building; `LOGOS_REV` records it as an image label
-and does not select the checkout for you.
+The named build context requires BuildKit support. It copies only `skill/`
+(including the GPL-2.0-only license) to `/opt/logos/skill`; no Git history or
+credentials are copied. `LOGOS_REV` records the selected checkout as a label,
+not a command to switch revisions. This image adds libclang and the LOGOS
+wrapper to the Frama-C/prover toolchain. It contains no Codex installation or
+login state. Host libclang and Frama-C installations are unnecessary.
+Override `AUTODEDUCT_IMAGE` at build time to reuse a compatible base image.
+On Apple Silicon, add `--platform linux/amd64` to both image builds.
 
-This layer installs libclang and Codex CLI `0.162.1` and sets
-`AUTODEDUCT_LLM_SKILL=/opt/logos/skill/SKILL.md`. It also copies this checkout's
-AutoDeduct CLI. Override `AUTODEDUCT_IMAGE` to reuse a compatible toolchain
-image, or `CODEX_VERSION` to deliberately test another CLI version.
-On Apple Silicon, add `--platform linux/amd64` to all Docker build/run commands.
-
-### Authenticate and run
-
-Check that the host permits Codex's Linux sandbox before starting a model run:
+Run the launcher on the host:
 
 ```shell
-docker run --rm auto-deduct:logos codex sandbox linux -- /bin/true
+autodeduct llm --llm-runtime docker --timeout 1200 \
+  --output-dir /tmp/logos-proof --wp-rte path/to/program.c
 ```
 
-This makes no model call. If it fails with a `bwrap` namespace-permission error,
-the Docker host's namespace/security policy is incompatible with the sandbox.
-Resolve that runtime configuration before running LLM mode; a successful image
-build or fixed-contract test does not establish sandbox compatibility.
+Use `--llm-docker-image IMAGE` for another compatible image and
+`--llm-docker-platform PLATFORM` for its platform (default `linux/amd64`).
+Source/header directories from the source path and `--include` are mounted
+read-only at the same absolute paths; only the separate output folder is
+writable. The container uses your host UID/GID, has a read-only root filesystem,
+a temporary `/tmp`, no added capabilities and no network access. It mounts
+neither your Codex login directory nor Docker's socket. Commas/newlines in mount
+paths are unsupported. Docker Desktop must allow sharing the selected folders.
+Linux/macOS and Windows through WSL are supported host environments for this
+runtime. Additional filesystem resources referenced through raw Frama-C options
+must already be under the mounted source/include directories.
 
-Keep Codex login state in a runtime volume, outside the image:
+### Unsupported: Codex Inside Docker
 
-```shell
-docker volume create logos-codex
-docker run --rm -it -v logos-codex:/home/dev/.codex \
-  auto-deduct:logos codex login --device-auth
-```
-
-Device login must be enabled for the account/workspace. Other supported login
-methods are described in the [official authentication documentation](https://learn.chatgpt.com/docs/auth).
-No model credentials are stored in the Dockerfile.
-
-```shell
-docker run --rm \
-  -v logos-codex:/home/dev/.codex \
-  -v "$PWD":/work:ro -w /work \
-  -v "$PWD/../logos-proof":/output \
-  auto-deduct:logos autodeduct --mode llm --timeout 1200 \
-  --output-dir /output --wp-rte tests/fixtures/v1_smoke.c
-```
-
-Create `../logos-proof` first and make it writable by the container's `dev`
-user (UID 2000 by default). Use a separate output directory, outside the
-mounted source tree. The Codex runner retains its workspace-write sandbox;
-the container host must support it. Authentication, model access, and sandbox
-permissions are runtime prerequisites; failures are reported rather than
-bypassed. The fixed-contract integration test below does not test live model
-access or the Codex sandbox.
+Launch `autodeduct llm` on the host. AutoDeduct rejects container LLM launches
+before clearing outputs. The traditional `autodeduct deductive` workflow still
+runs entirely in Docker. Our previous all-in-one LLM experiments encountered
+namespace and seccomp initialization failures. Keeping the agent on the host
+also lets it use its existing login. No custom Docker security profile or
+container Codex login is part of the supported setup.
 
 ### Check the LOGOS/WP interface without a model call
 
@@ -213,7 +222,8 @@ docker run --rm \
   -p test_logos_integration.py -v
 ```
 
-This uses a test-only fixed contract runner with the real LOGOS wrapper and
+This offline test bypasses the host-only guard with a test-only fixed contract
+runner and uses the real LOGOS wrapper and
 Frama-C WP. It checks the requested proof options, evidence hash, source
 preservation, successful proof acceptance, and rejection of an incomplete
 proof despite Frama-C returning zero. It does not call an LLM or run the
