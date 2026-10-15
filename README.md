@@ -18,7 +18,8 @@ contracts are generated. The default is `deductive`; existing
 ## Start here
 
 1. Choose your [installation](docs/INSTALLATION.md): standard Docker image,
-   native tools, or the host launcher for LLM mode.
+   native tools, or the host launcher for LLM mode. For LLM Docker setup,
+   start with the [Windows/WSL, Ubuntu or macOS instructions](#llm-docker-quickstart-by-operating-system).
 2. Follow the usage guide for [deductive mode](docs/DEDUCTIVE.md) or
    [LLM mode](docs/LLM.md).
 3. Read [common CLI options and input rules](docs/USAGE.md) and
@@ -37,45 +38,15 @@ Docker is optional. **Both LLM runtimes use the host AutoDeduct launcher and
 host Codex CLI.** Running Codex inside Docker is unsupported. The current LLM
 adapter requires Codex; arbitrary agents and model APIs are not supported yet.
 
-## Quick commands
-
-From an AutoDeduct checkout with the selected dependencies configured:
-
-```shell
-# Locally installed traditional toolchain:
-./bin/autodeduct deductive --output-dir /tmp/deductive-proof path/to/program.c
-
-# Host Codex and local LOGOS/Frama-C:
-./bin/autodeduct llm --llm-runtime local \
-  --llm-skill /absolute/path/to/logos/skill/SKILL.md \
-  --output-dir /tmp/llm-proof path/to/program.c
-
-# Host Codex and LOGOS verification in the prepared Docker image:
-./bin/autodeduct llm --llm-runtime docker \
-  --llm-docker-image auto-deduct:latest \
-  --output-dir /tmp/llm-proof path/to/program.c
-```
-
-A separate AutoDeduct package installation is unnecessary. Use `./bin/autodeduct`
-directly or add the checkout's `bin/` directory to `PATH`; see
-[host launcher setup](docs/INSTALLATION.md#host-launcher).
-These examples require setup first. Docker mode does not install or build its
-image automatically or pull it from a registry. `--llm-docker-image IMAGE`
-selects an existing local image by name and tag or image ID; its default is
-`auto-deduct:latest`. If you build with another name, pass that same name here;
-see the [custom image example](docs/LLM.md#choose-a-custom-image-name).
-For larger LLM runs, see the timeout guidance in
-[LLM usage](docs/LLM.md#run-with-docker-verification).
-The standard image includes LOGOS alongside Saida, ISP and TriCera. Docker LLM
-runs extract their skill from it; building or running that image requires no
-separate host LOGOS checkout.
-
 ## LLM Docker quickstart by operating system
 
 This workflow uses host Python 3.10+, Git, authenticated
 [Codex CLI](https://learn.chatgpt.com/docs/cli), and a running Docker installation.
 The standard image supplies LOGOS, libclang, Frama-C and provers. Choose your
-platform setup, then use the shared build/run commands below.
+platform setup, then use the shared build/run commands below. The launcher
+is included in the checkout; a separate AutoDeduct package installation or
+local LOGOS clone is unnecessary for this Docker workflow. Build or load the
+image first; the launcher does not build or pull it automatically.
 
 ### Windows (WSL 2)
 
