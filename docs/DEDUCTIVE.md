@@ -13,6 +13,7 @@ run from the AutoDeduct checkout:
 
 ```shell
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   -v "$PWD":/work -w /work \
   auto-deduct:latest \
   autodeduct deductive --entry-point main \
@@ -26,7 +27,8 @@ are unnecessary. On Apple Silicon, add `--platform linux/amd64` after
 
 For another project, mount its root as `/work`, pass the C file and any headers
 with `--include /work/include`. Keep generated output separate from input.
-The container's `dev` user must be able to write the selected output location.
+The Bash/WSL command uses your host UID/GID so the container can write output
+and you can read its private reports and logs afterwards.
 
 ## Run locally
 
