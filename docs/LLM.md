@@ -23,6 +23,10 @@ AutoDeduct package installation is unnecessary.
 
 ## Set up the host agent
 
+Use the [Windows/WSL 2, Ubuntu or macOS quickstart](../README.md#llm-docker-quickstart-by-operating-system)
+for platform setup and a complete Docker example. Windows LLM Docker commands
+run in WSL 2, with Python and Codex installed inside that distribution.
+
 Install [Codex CLI](https://learn.chatgpt.com/docs/cli) on the host and sign in:
 
 ```shell

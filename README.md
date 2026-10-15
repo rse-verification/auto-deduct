@@ -70,6 +70,125 @@ The standard image includes LOGOS alongside Saida, ISP and TriCera. Docker LLM
 runs extract their skill from it; building or running that image requires no
 separate host LOGOS checkout.
 
+## LLM Docker quickstart by operating system
+
+This workflow uses host Python 3.10+, Git, authenticated
+[Codex CLI](https://learn.chatgpt.com/docs/cli), and a running Docker installation.
+The standard image supplies LOGOS, libclang, Frama-C and provers. Choose your
+platform setup, then use the shared build/run commands below.
+
+### Windows (WSL 2)
+
+Run this workflow inside an Ubuntu WSL 2 terminal. Native PowerShell, Command
+Prompt and Git Bash are not supported launch environments for LLM Docker mode.
+Python, Git and Codex must be installed inside WSL; a Windows Codex installation
+alone is insufficient.
+
+If WSL is missing, run this in **administrator PowerShell**, then restart if
+prompted and complete Ubuntu's first-run setup:
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+See [Microsoft's WSL setup](https://learn.microsoft.com/en-us/windows/wsl/install).
+Start Docker Desktop with Linux containers and enable Ubuntu under
+**Settings > Resources > WSL Integration**; see
+[Docker's WSL instructions](https://docs.docker.com/desktop/features/wsl/).
+Inside the Ubuntu WSL terminal:
+
+```bash
+sudo apt update
+sudo apt install -y git python3
+cd ~
+```
+
+Install/sign into Codex inside WSL, then run the shared commands in that same
+terminal. Keep the checkout and output in the WSL Linux filesystem.
+`export PATH="$PWD/bin:$PATH"` below is a Bash command, not PowerShell syntax.
+
+### Ubuntu
+
+Use a Bash terminal with Python 3.10+ and Codex available:
+
+```bash
+sudo apt update
+sudo apt install -y git python3
+```
+
+Install/start [Docker Engine](https://docs.docker.com/engine/install/ubuntu/)
+or Docker Desktop. `docker info` must work as your normal user because the
+launcher invokes Docker without `sudo`; follow
+[Docker's user-access setup](https://docs.docker.com/engine/install/linux-postinstall/)
+if required. Then use the shared commands below.
+
+### macOS
+
+Use Terminal with Bash or Zsh, Codex CLI and Docker Desktop running. If Git or
+Python is missing, install them with Homebrew:
+
+```bash
+brew install git python
+```
+
+The shared `linux/amd64` build works for Intel and Apple Silicon Macs; the
+current TriCera toolchain requires that architecture. Docker Desktop must allow
+sharing the checkout and output directories.
+
+### Build and run (Ubuntu, macOS, or Ubuntu inside WSL 2)
+
+Run these Bash/Zsh commands on the host. In Windows, the host terminal here is
+the Ubuntu WSL terminal. The PATH export applies to the current session.
+
+```bash
+# Check prerequisites: Python must be 3.10 or newer.
+python3 --version
+codex --version
+codex login status
+# If needed: codex login
+docker info
+
+git clone --branch llm-skill-mode \
+  https://github.com/rse-verification/auto-deduct.git
+cd auto-deduct
+export PATH="$PWD/bin:$PATH"
+
+autodeduct --version
+autodeduct llm --help
+
+docker build --platform linux/amd64 \
+  -t auto-deduct:latest \
+  -f Dockerfiles/AutoDeductDockerfile .
+
+autodeduct llm \
+  --llm-runtime docker \
+  --llm-docker-image auto-deduct:latest \
+  --timeout 1200 --wp-rte \
+  --output-dir /tmp/autodeduct-stee-llm \
+  examples/ase-2024/stee.c
+
+python3 -m json.tool /tmp/autodeduct-stee-llm/report.json
+cat /tmp/autodeduct-stee-llm/inferred.wp-report.txt
+```
+
+This run sends source/specifications to the configured model through Codex.
+If generation fails before verification, the WP reports may be absent; inspect
+`report.json` and the stage logs first.
+
+### Open the PDF report
+
+| Platform | Command after verification |
+| --- | --- |
+| Ubuntu desktop | `xdg-open /tmp/autodeduct-stee-llm/inferred.wp-report.pdf` |
+| macOS | `open /tmp/autodeduct-stee-llm/inferred.wp-report.pdf` |
+| Windows/WSL 2 | `explorer.exe "$(wslpath -w /tmp/autodeduct-stee-llm)"` then open the PDF in that folder |
+
+On Ubuntu, install `xdg-utils` if `xdg-open` is missing. On a headless server,
+read the text report or copy the PDF to a computer with a PDF viewer.
+This quickstart targets the current AMD64 toolchain; ARM Linux hosts need
+working AMD64 emulation. See [LLM usage](docs/LLM.md) for local verification,
+custom images and further options.
+
 ## Reports and scope
 
 A successful run requires complete nonzero WP goals and all mandatory stages.
