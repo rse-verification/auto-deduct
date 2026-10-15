@@ -1,15 +1,17 @@
-"""Pipeline orchestration: run the V1 stage sequence and the CLI entry point."""
+"""Pipeline orchestration for the deductive and LLM workflows and CLI entry point."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import shutil
+import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Sequence
 
 from .cli import VERSION, parser, validate_forwarded_options
+from .llm import run_skill_workflow, validate_llm_options
 from .diagnostics import (
     isp_limit_diagnostic,
     isp_partial_diagnostic,
@@ -43,7 +45,7 @@ from .stages import (
 )
 
 
-# Run the Saida/TriCera, ISP/Eva, contract-check, and WP stages in V1 order.
+# Run the deductive Saida/TriCera, ISP/Eva, contract-check, and WP stages.
 def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     output_dir = Path(args.output_dir).expanduser().resolve()
     requested_files = []
@@ -60,24 +62,29 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
             # source root before invalidating any stale report.
             input_roots.append(source)
     validate_output_directory(requested_files, output_dir, input_roots)
+    # The skill and runner must survive output cleanup too.
+    validate_llm_options(args, output_dir)
     invalidate_stale_report(output_dir)
     validate_forwarded_options(args)
     inputs = source_paths(args.sources)
     if len(inputs) != 1:
         raise PipelineError(
             "input",
-            "AutoDeduct V1 supports exactly one C translation unit because "
-            "Saida source merging is not yet file-aware; provide one .c file "
-            "and its headers",
+            "AutoDeduct currently supports exactly one C translation unit; "
+            "provide one .c file and its headers",
         )
     validate_output_directory(inputs, output_dir, input_roots)
     prepare_output_directory(output_dir)
     report = PipelineReport(
         version=VERSION,
+        mode=args.mode,
         status="failed",
         input_files=[str(path) for path in inputs],
         output_directory=str(output_dir),
     )
+
+    if args.mode == "llm":
+        return run_skill_workflow(args, inputs[0], output_dir, report)
 
     missing_tools = [tool for tool in ("frama-c", "tri") if shutil.which(tool) is None]
     if missing_tools:
@@ -232,7 +239,7 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
         wp_options.append("-wp-rte")
     wp = run_stage(
         name="wp",
-        description="Check the generated contract and auxiliary annotations with WP",
+        description="Check the generated annotations with WP",
         command=["frama-c", *wp_options, "-wp", str(verified_source)],
         cwd=output_dir,
         output_dir=output_dir,
@@ -262,12 +269,21 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
 
 # Parse arguments, convert failures into reports, and return a CI-friendly exit code.
 def main(argv: Sequence[str] | None = None) -> int:
-    args = parser().parse_args(argv)
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    cli = parser()
+    if arguments and arguments[0] in {"llm", "deductive"}:
+        mode = {"llm": "llm", "deductive": "deterministic"}[arguments.pop(0)]
+        options = arguments[:arguments.index("--")] if "--" in arguments else arguments
+        if any(word == "--mode" or word.startswith("--mode=") for word in options):
+            cli.error("choose a mode command or --mode, not both")
+        arguments[:0] = ["--mode", mode]
+    args = cli.parse_args(arguments)
     try:
         report = run_pipeline(args)
     except PipelineError as error:
         report = PipelineReport(
             version=VERSION,
+            mode=args.mode,
             status="failed",
             input_files=list(args.sources),
             output_directory=str(Path(args.output_dir).expanduser().resolve()),
@@ -276,6 +292,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except OSError as error:
         report = PipelineReport(
             version=VERSION,
+            mode=args.mode,
             status="failed",
             input_files=list(args.sources),
             output_directory=str(Path(args.output_dir).expanduser().resolve()),

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 
 from .stages import PipelineError
 
-VERSION = "1.0.0"
+VERSION = "2.0.0-rc.1"
 
 PIPELINE_OWNED_OPTIONS = frozenset({
     "-main",
@@ -55,17 +56,43 @@ def validate_forwarded_options(args: argparse.Namespace) -> None:
                 )
 
 
-# Define the V1 command-line interface and its supported analysis options.
+# Define the command-line interface and its supported analysis options.
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="autodeduct",
+        usage="%(prog)s [llm|deductive] [options] SOURCE_OR_DIRECTORY",
         description=(
-            "Run Saida/TriCera contract inference, ISP/Eva auxiliary "
-            "inference, and WP verification."
+            "Use 'deductive' for Saida/TriCera/ISP/Eva inference and WP, "
+            "or 'llm' for the LOGOS skill workflow through Codex. "
+            "Both modes verify contracts with WP."
         ),
     )
     result.add_argument("--version", action="version", version=f"AutoDeduct {VERSION}")
     result.add_argument("--json", action="store_true", help="print the final report as JSON")
+    result.add_argument(
+        "--mode", choices=("deterministic", "llm"), default="deterministic",
+        help="alternative to the llm/deductive command; default: deterministic",
+    )
+    result.add_argument(
+        "--llm-skill", default=os.environ.get("AUTODEDUCT_LLM_SKILL"),
+        metavar="SKILL_MD", help="local runtime skill (or AUTODEDUCT_LLM_SKILL); Docker extracts its skill from the image",
+    )
+    result.add_argument(
+        "--llm-runner", default=os.environ.get("AUTODEDUCT_LLM_RUNNER", "codex exec"),
+        metavar="COMMAND", help="Codex exec command (or AUTODEDUCT_LLM_RUNNER; default: codex exec)",
+    )
+    result.add_argument(
+        "--llm-runtime", choices=("local", "docker"), default="local",
+        help="run the LOGOS wrapper locally or in Docker; Codex always runs on the host (default: local)",
+    )
+    result.add_argument(
+        "--llm-docker-image", default="auto-deduct:latest", metavar="IMAGE",
+        help="existing local LOGOS verifier image name:tag or ID for --llm-runtime docker; no automatic build or pull (default: %(default)s)",
+    )
+    result.add_argument(
+        "--llm-docker-platform", default="linux/amd64", metavar="PLATFORM",
+        help="verifier image platform (default: %(default)s)",
+    )
     result.add_argument(
         "--output-dir",
         default="autodeduct-output",
@@ -81,7 +108,7 @@ def parser() -> argparse.ArgumentParser:
         type=positive_timeout,
         default=300.0,
         help=(
-            "finite positive maximum seconds for each Frama-C stage "
+            "finite positive maximum seconds for each external stage "
             "(default: %(default)s)"
         ),
     )

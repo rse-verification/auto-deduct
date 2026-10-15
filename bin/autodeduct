@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Command-line entry point for the AutoDeduct V1 pipeline."""
+"""Command-line entry point for AutoDeduct V2."""
 
 from autodeduct_pipeline import main
 

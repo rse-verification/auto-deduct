@@ -81,3 +81,8 @@ jobs:
           AUTODEDUCT_RUN_INTEGRATION: "1"
           AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_expected_incomplete_wp_integration.py" -v
+      - name: Run host LOGOS integration against the standard image
+        env:
+          AUTODEDUCT_RUN_LOGOS_DOCKER: "1"
+          AUTODEDUCT_IMAGE: auto-deduct:ci
+        run: python -m unittest discover -s tests -p "test_logos_integration.py" -v

@@ -25,7 +25,7 @@ class ExpectedIncompleteWpIntegrationTests(DockerPipelineTestCase):
         self.assertEqual(stages["contract_check"]["status"], "passed")
 
     def test_local_static_state_reports_missing_contract_and_incomplete_wp(self):
-        """Require persistent local state to remain a visible V1 boundary."""
+        """Require persistent local state to remain a visible deductive-mode boundary."""
         run = self.run_autodeduct(
             "tests/cases/expected-incomplete-wp/local_static_helper_persistence.c",
             "entry",
