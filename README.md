@@ -55,6 +55,18 @@ Prompt and Git Bash are not supported launch environments for LLM Docker mode.
 Python, Git and Codex must be installed inside WSL; a Windows Codex installation
 alone is insufficient.
 
+**The full LLM Docker command requires WSL 2, even when you invoke the launcher
+explicitly with Python.** Docker runs the verifier in Linux, but the AutoDeduct
+launcher still runs in the environment where you start Python. Native Windows
+Python with `--llm-runtime docker` stops with:
+
+```text
+ERROR [input]: Docker LLM mode requires POSIX host paths; use WSL on Windows
+```
+
+Changing the output directory or adding a `python` prefix does not resolve this
+error. Enter Ubuntu WSL and use its Linux Python for the full run.
+
 If Windows asks you to select an application when running `autodeduct`, it is
 trying to open the extensionless Python script as a file. Adding `bin/` to
 Windows `PATH` does not make it a native executable. For version/help checks
@@ -65,8 +77,8 @@ python .\bin\autodeduct --version
 python .\bin\autodeduct llm --help
 ```
 
-These checks do not enable native Windows LLM Docker execution. Run that
-workflow inside WSL 2 using the setup below.
+**The two PowerShell commands above are version/help checks only.** Run contract
+generation and verification inside WSL 2 using the setup below.
 
 If WSL is missing, run this in **administrator PowerShell**, then restart if
 prompted and complete Ubuntu's first-run setup:
@@ -96,6 +108,21 @@ cd ~
 Install/sign into Codex inside WSL, then run the shared commands in that same
 terminal. Keep the checkout and output in the WSL Linux filesystem.
 `export PATH="$PWD/bin:$PATH"` below is a Bash command, not PowerShell syntax.
+After cloning and building with the shared instructions, the full command can
+also be invoked explicitly with Linux Python **inside that WSL terminal**, from
+the checkout:
+
+```bash
+python3 ./bin/autodeduct llm \
+  --llm-runtime docker \
+  --llm-docker-image auto-deduct:latest \
+  --timeout 1200 --wp-rte \
+  --output-dir /tmp/autodeduct-stee-llm \
+  examples/ase-2024/stee.c
+```
+
+An image already built through the same Docker Desktop engine can be reused
+from WSL; check `docker image inspect auto-deduct:latest` before rebuilding it.
 
 ### Ubuntu
 
