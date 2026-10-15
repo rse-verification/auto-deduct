@@ -84,11 +84,30 @@ Prompt and Git Bash are not supported launch environments for LLM Docker mode.
 Python, Git and Codex must be installed inside WSL; a Windows Codex installation
 alone is insufficient.
 
+If Windows asks you to select an application when running `autodeduct`, it is
+trying to open the extensionless Python script as a file. Adding `bin/` to
+Windows `PATH` does not make it a native executable. For version/help checks
+only, use Windows Python 3.10+ explicitly from the checkout in PowerShell:
+
+```powershell
+python .\bin\autodeduct --version
+python .\bin\autodeduct llm --help
+```
+
+These checks do not enable native Windows LLM Docker execution. Run that
+workflow inside WSL 2 using the setup below.
+
 If WSL is missing, run this in **administrator PowerShell**, then restart if
 prompted and complete Ubuntu's first-run setup:
 
 ```powershell
 wsl --install -d Ubuntu
+```
+
+If Ubuntu is already installed, enter it from PowerShell with:
+
+```powershell
+wsl -d Ubuntu
 ```
 
 See [Microsoft's WSL setup](https://learn.microsoft.com/en-us/windows/wsl/install).
