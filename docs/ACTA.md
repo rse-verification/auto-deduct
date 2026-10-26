@@ -79,7 +79,7 @@ use AutoDeduct's Frama-C 33 toolchain.
 
 Build and install the report-enabled AcTa revision using its
 [upstream instructions](https://github.com/rse-verification/AcTa/tree/autodeduct-adoptation#build).
-The Docker image pins revision `74ef7de3f676efbdd7e1b8932e03b018fd449dc0`.
+The Docker image pins revision `cbfedef2058bf101a35361a3c9cd0d5d5215f5b4`.
 If using a separate opam switch, select its frontend for AutoDeduct:
 
 ```shell

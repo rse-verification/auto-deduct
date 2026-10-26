@@ -277,7 +277,7 @@ CMD ["/usr/bin/bash", "-l"]
 FROM auto-deduct-base AS auto-deduct-acta
 
 ARG ACTA_REPO="https://github.com/rse-verification/AcTa.git"
-ARG ACTA_VER="74ef7de3f676efbdd7e1b8932e03b018fd449dc0"
+ARG ACTA_VER="cbfedef2058bf101a35361a3c9cd0d5d5215f5b4"
 ARG ACTA_FRAMA_C_VER="31.0"
 
 USER dev

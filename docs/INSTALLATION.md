@@ -106,7 +106,7 @@ The optional `auto-deduct-acta-runtime` target adds AcTa and CBMC. AcTa is
 currently private; use the [BuildKit secret setup](ACTA.md#docker-from-the-host-launcher)
 with an account that has read access. The default image remains independently
 buildable from public sources.
-AcTa is pinned to `74ef7de3f676efbdd7e1b8932e03b018fd449dc0` and built with
+AcTa is pinned to `cbfedef2058bf101a35361a3c9cd0d5d5215f5b4` and built with
 Frama-C 31.0 in a separate opam switch using Ubuntu's system OCaml. Its frontend
 is available as `acta-frama-c`; it does not replace the default Frama-C 33.
 CBMC 6.11.0 uses official Ubuntu 24.04 amd64/arm64 packages with pinned SHA-256
