@@ -10,6 +10,7 @@ Choose a setup before running a command:
 | Deductive locally | Install the [native toolchain](#native-installation) and host launcher |
 | LLM locally | Install the [host launcher](#host-launcher), then follow [LLM local setup](LLM.md#local-verification-dependencies) |
 | LLM with Docker verification | Install the host launcher, then follow [LLM Docker setup](LLM.md#build-the-verifier-image) |
+| AcTa/CBMC locally or with Docker | Follow [AcTa setup](ACTA.md); its optional image target supplies both tools for Docker execution |
 
 ## Host launcher
 
@@ -101,11 +102,24 @@ The default image uses OCaml 5.4.0, Frama-C 33.0, ISP `v0.4.0`, Saida
 inherited from the Ubuntu package version.
 LOGOS is pinned to commit `cea177911b6ad5176122b4b3c415f92897c464d2`
 on its `main` branch.
+The optional `auto-deduct-acta-runtime` target adds AcTa and CBMC. AcTa is
+currently private; use the [BuildKit secret setup](ACTA.md#docker-from-the-host-launcher)
+with an account that has read access. The default image remains independently
+buildable from public sources.
+AcTa is pinned to `74ef7de3f676efbdd7e1b8932e03b018fd449dc0` and built with
+Frama-C 31.0 in a separate opam switch using Ubuntu's system OCaml. Its frontend
+is available as `acta-frama-c`; it does not replace the default Frama-C 33.
+CBMC 6.11.0 uses official Ubuntu 24.04 amd64/arm64 packages with pinned SHA-256
+digests. The TriCera architecture constraint above still applies to the full
+standard image.
 
 The Dockerfile accepts `SAIDA_REPO`, `TRICERA_REPO`, `ISP_REPO`, and `LOGOS_REPO`,
 together with `OCAML_VER`, `SAIDA_VER`, `TRICERA_VER`, `ISP_VER`, and `LOGOS_VER`.
 A component version may be a branch, tag, or commit reachable from the selected
 repository.
+AcTa adds `ACTA_REPO`, `ACTA_VER`, and `ACTA_FRAMA_C_VER`. CBMC adds `CBMC_VER`,
+`CBMC_SHA256_AMD64` and `CBMC_SHA256_ARM64`; update the matching official package
+digests when changing its version.
 
 ```shell
 docker build \
@@ -133,6 +147,7 @@ inside the image; LOGOS records its commit in `/opt/logos/REVISION`. Only LOGOS'
 its temporary checkout and Git history are removed. Prefer immutable tags or
 commits for release images. Add `--no-cache` when deliberately retesting a
 moving branch that Docker may have cached.
+AcTa's resolved revision is stored in `/opt/acta/REVISION`.
 
 ## Corporate Proxy Builds
 

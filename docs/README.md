@@ -7,6 +7,7 @@ Start with setup, then choose a usage guide.
 | [Installation](INSTALLATION.md) | Host launcher, traditional Docker/native tools, component versions and proxy builds |
 | [Deductive usage](DEDUCTIVE.md) | Traditional pipeline commands in Docker or locally; outputs and manual stages |
 | [LLM setup and usage](LLM.md) | Host Codex + LOGOS setup, local/Docker verification, JSON handoff and LLM troubleshooting |
+| [AcTa and CBMC](ACTA.md) | Harness generation from existing contracts, local/Docker execution, CBMC options and bounded results |
 | [Common usage](USAGE.md) | Shared CLI options, input/output rules and exit status |
 | [Pipeline and diagnostics](PIPELINE.md) | Stages, success criteria, evidence checks and interpreting failures |
 | [Limitations](LIMITATIONS.md) | Shared proof requirements, deductive inference boundaries and LLM coverage under investigation |

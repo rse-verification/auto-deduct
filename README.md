@@ -1,6 +1,7 @@
 # AutoDeduct “Double Ducks” — release candidate
 
-AutoDeduct generates contracts for C programs and checks them with Frama-C WP.
+AutoDeduct generates contracts for C programs and checks them with Frama-C WP,
+or checks existing entry contracts using AcTa and CBMC.
 It accepts one C translation unit and its headers. Generated source, logs and
 reports go into a separate output directory; the original input stays unchanged.
 
@@ -10,10 +11,22 @@ reports go into a separate output directory; the original input stays unchanged.
 | --- | --- | --- |
 | `autodeduct deductive` | Saida/TriCera, with ISP/Eva auxiliary annotations | Frama-C WP and reachable-helper coverage checks |
 | `autodeduct llm` | Host Codex using [LOGOS](https://github.com/rse-verification/logos) | LOGOS wrapper runs Frama-C WP; AutoDeduct validates its evidence |
+| `autodeduct acta` | Existing ACSL entry contract becomes a CBMC harness through [AcTa](https://github.com/rse-verification/AcTa) | AcTa runs CBMC with unwinding assertions; AutoDeduct imports its report |
 
-Both workflows use deductive verification. The command names distinguish how
-contracts are generated. The default is `deductive`. You can also select a workflow with
-`--mode deductive` or `--mode llm`.
+The deductive and LLM workflows use WP; AcTa uses bounded model checking.
+The default is `deductive`; `--mode deductive`, `--mode llm`, and
+`--mode acta` flags are alternatives to the commands.
+
+For AcTa with its optional Docker image already built:
+
+```shell
+./bin/autodeduct acta examples/acta/increment.c --entry-point compute \
+  --acta-runtime docker --output-dir /tmp/autodeduct-acta --json
+```
+
+See [AcTa/CBMC setup and usage](docs/ACTA.md) for local installation,
+the optional image build (currently requiring AcTa repository access), CBMC
+options and bounded-verification limits.
 
 ## Start here
 
@@ -21,7 +34,7 @@ contracts are generated. The default is `deductive`. You can also select a workf
    native tools, or the host launcher for LLM mode. For LLM Docker setup,
    start with the [Windows/WSL, Ubuntu or macOS instructions](#llm-docker-quickstart-by-operating-system).
 2. Follow the usage guide for [deductive mode](docs/DEDUCTIVE.md) or
-   [LLM mode](docs/LLM.md).
+   [LLM mode](docs/LLM.md), or [AcTa/CBMC mode](docs/ACTA.md).
 3. Read [common CLI options and input rules](docs/USAGE.md) and
    [how to interpret reports](docs/PIPELINE.md).
 
@@ -33,6 +46,8 @@ contracts are generated. The default is `deductive`. You can also select a workf
 | Deductive without Docker | AutoDeduct and its verification dependencies | Unused |
 | LLM with `--llm-runtime local` | Python, AutoDeduct, Codex, LOGOS and verification dependencies | Unused |
 | LLM with `--llm-runtime docker` | Python, AutoDeduct launcher and authenticated Codex; skill extracted from image | LOGOS Python wrapper, libclang, Frama-C/WP and provers |
+| AcTa with `--acta-runtime local` | Python, AutoDeduct, compatible AcTa/Frama-C and CBMC | Unused |
+| AcTa with `--acta-runtime docker` | Python, AutoDeduct launcher and Docker | AcTa/Frama-C frontend and CBMC |
 
 Docker is optional. **Both LLM runtimes use the host AutoDeduct launcher and
 host Codex CLI.** Running Codex inside Docker is unsupported. The current LLM

@@ -1,0 +1,3 @@
+#!/bin/sh
+# AcTa currently needs Frama-C 31; keep AutoDeduct's default switch on 33.
+exec /home/dev/.opam/acta/bin/frama-c "$@"

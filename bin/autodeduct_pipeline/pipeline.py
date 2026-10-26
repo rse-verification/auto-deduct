@@ -1,4 +1,4 @@
-"""Pipeline orchestration for the deductive and LLM workflows and CLI entry point."""
+"""Orchestrate deductive, LLM and AcTa workflows and the CLI entry point."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .cli import VERSION, parser, validate_forwarded_options
+from .acta import protect_acta_runtime, run_acta_workflow, validate_acta_options
 from .llm import run_skill_workflow, validate_llm_options
 from .diagnostics import (
     isp_limit_diagnostic,
@@ -45,7 +46,7 @@ from .stages import (
 )
 
 
-# Run the deductive Saida/TriCera, ISP/Eva, contract-check, and WP stages.
+# Validate shared paths, then run the selected workflow.
 def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     output_dir = Path(args.output_dir).expanduser().resolve()
     requested_files = []
@@ -64,8 +65,10 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     validate_output_directory(requested_files, output_dir, input_roots)
     # The skill and runner must survive output cleanup too.
     validate_llm_options(args, output_dir)
+    protect_acta_runtime(args, output_dir)
     invalidate_stale_report(output_dir)
     validate_forwarded_options(args)
+    validate_acta_options(args, output_dir)
     inputs = source_paths(args.sources)
     if len(inputs) != 1:
         raise PipelineError(
@@ -85,6 +88,8 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
 
     if args.mode == "llm":
         return run_skill_workflow(args, inputs[0], output_dir, report)
+    if args.mode == "acta":
+        return run_acta_workflow(args, inputs[0], output_dir, report)
 
     missing_tools = [tool for tool in ("frama-c", "tri") if shutil.which(tool) is None]
     if missing_tools:
@@ -271,8 +276,8 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     cli = parser()
-    if arguments and arguments[0] in {"llm", "deductive"}:
-        mode = arguments.pop(0)
+    if arguments and arguments[0] in {"llm", "deductive", "acta"}:
+        mode = {"llm": "llm", "deductive": "deductive", "acta": "acta"}[arguments.pop(0)]
         options = arguments[:arguments.index("--")] if "--" in arguments else arguments
         if any(word == "--mode" or word.startswith("--mode=") for word in options):
             cli.error("choose a mode command or --mode, not both")

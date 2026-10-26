@@ -7,7 +7,6 @@ import os
 import re
 import shlex
 import shutil
-import subprocess
 import sys
 import tempfile
 import uuid
@@ -15,6 +14,8 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 from .diagnostics import wp_diagnostic
+from .runtime import (docker_run_options, in_container, resolve_image,
+                      run_container_stage, validate_mount_path)
 from .stages import PipelineError, SAIDA_OUTPUT, StageResult, command_options, run_stage, write_text
 
 
@@ -65,23 +66,6 @@ def validate_llm_options(args, output_dir):
             validate_mount_path(path)
 
 
-def in_container():
-    return (os.environ.get("AUTODEDUCT_CONTAINER") == "1"
-            or Path("/.dockerenv").exists() or Path("/run/.containerenv").exists())
-
-
-def validate_mount_path(path):
-    if "," in str(path) or "\n" in str(path):
-        raise PipelineError("input", "Docker bind-mount paths cannot contain commas or newlines")
-
-
-def docker_run_options(args, name):
-    return ["docker", "run", "--rm", "--name", name, "--platform", args.llm_docker_platform,
-            "--network", "none", "--read-only", "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges", "--tmpfs", "/tmp:rw,nosuid,size=256m",
-            "--user", f"{os.getuid()}:{os.getgid()}"]
-
-
 def wrapper_command(args, source, output_dir, contracts, annotated, evidence_file, options,
                     *, check_dependencies=False):
     wrapper_args = ["--check-dependencies"] if check_dependencies else [
@@ -92,7 +76,7 @@ def wrapper_command(args, source, output_dir, contracts, annotated, evidence_fil
         wrapper = Path(args.llm_skill).expanduser().resolve().parent / "scripts/generate_acsl.py"
         return [sys.executable, str(wrapper), *wrapper_args], None
     name = f"autodeduct-logos-{uuid.uuid4().hex}"
-    command = docker_run_options(args, name)
+    command = docker_run_options(args.llm_docker_platform, name)
     # Preserve absolute paths so verifier evidence matches the host task exactly.
     roots = {source.parent, *(Path(value).expanduser().resolve() for value in args.include)}
     for root in sorted(roots, key=str):
@@ -104,24 +88,6 @@ def wrapper_command(args, source, output_dir, contracts, annotated, evidence_fil
                 "--workdir", str(output_dir), args.llm_docker_image,
                 "python3", "/opt/logos/skill/scripts/generate_acsl.py", *wrapper_args]
     return command, name
-
-
-def run_logos_stage(*, container_name, report, **stage_options):
-    """Stop a failed or timed-out verifier container as well as its Docker client."""
-    result = None
-    try:
-        result = run_stage(**stage_options)
-        return result
-    finally:
-        if container_name and (result is None or result.status != "passed"):
-            try:
-                completed = subprocess.run(["docker", "rm", "--force", container_name],
-                                           capture_output=True, timeout=10, check=False)
-                # A --rm container that already finished needs no further cleanup.
-                if completed.returncode and "No such container" not in completed.stderr.decode(errors="replace"):
-                    report.errors.append({"stage": "cleanup", "message": f"could not confirm cleanup of container {container_name}"})
-            except (OSError, subprocess.TimeoutExpired):
-                report.errors.append({"stage": "cleanup", "message": f"could not confirm cleanup of container {container_name}"})
 
 
 def validate_contracts(path, source_text):
@@ -167,28 +133,16 @@ def run_skill_workflow(args, source, output_dir, report):
         return _run_skill_workflow(args, source, output_dir, report,
                                    Path(args.llm_skill).expanduser().resolve())
 
-    image = run_stage(
-        name="logos_image", description="Resolve the verifier image to an immutable ID",
-        command=["docker", "image", "inspect", "--format", "{{.Id}}", args.llm_docker_image],
-        cwd=output_dir, output_dir=output_dir, timeout=args.timeout,
-    )
-    report.stages.append(image)
-    if image.status != "passed":
-        report.errors.append({"stage": image.name, "message":
-                              f"{image.error or 'image inspection failed'}; build or load the selected LOGOS verifier image first"})
-        return report
-    image_id = Path(image.stdout_file).read_text(encoding="utf-8").strip()
-    if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
-        image.status = "failed"
-        image.error = "Docker did not return a valid immutable image ID"
-        report.errors.append({"stage": image.name, "message": image.error})
+    image_id = resolve_image(args.llm_docker_image, name="logos_image", report=report,
+                             output_dir=output_dir, timeout=args.timeout)
+    if image_id is None:
         return report
     pinned_args = copy.copy(args)
     pinned_args.llm_docker_image = image_id
     name = f"autodeduct-logos-{uuid.uuid4().hex}"
-    extraction = run_logos_stage(
+    extraction = run_container_stage(
         name="logos_skill", description="Extract the LOGOS skill from the pinned verifier image",
-        command=[*docker_run_options(pinned_args, name), image_id, "python3", "-c",
+        command=[*docker_run_options(args.llm_docker_platform, name), image_id, "python3", "-c",
                  "from pathlib import Path; print(Path('/opt/logos/skill/SKILL.md').read_text(encoding='utf-8'), end='')"],
         container_name=name, report=report, cwd=output_dir, output_dir=output_dir,
         timeout=args.timeout,
@@ -240,7 +194,7 @@ def _run_skill_workflow(args, source, output_dir, report, skill):
         args, source, output_dir, contracts, annotated, evidence_file, options,
         check_dependencies=True,
     )
-    environment = run_logos_stage(
+    environment = run_container_stage(
         name="logos_environment", description=f"Check LOGOS verification dependencies ({args.llm_runtime})",
         command=environment_command, cwd=output_dir, output_dir=output_dir,
         timeout=args.timeout, container_name=environment_container, report=report,
@@ -305,7 +259,7 @@ def _run_skill_workflow(args, source, output_dir, report, skill):
     except (OSError, ValueError) as error:
         report.errors.append({"stage": "llm_contracts", "message": str(error)})
         return report
-    wrapper = run_logos_stage(
+    wrapper = run_container_stage(
         name="logos_verify", description=f"Annotate and verify with LOGOS ({args.llm_runtime})",
         command=command, cwd=output_dir, output_dir=output_dir,
         timeout=args.timeout, artifact=evidence_file,

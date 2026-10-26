@@ -22,6 +22,8 @@ class AutoDeductPipelineTests(unittest.TestCase):
         for words, expected in (
             (["llm", "input.c"], "llm"),
             (["deductive", "input.c"], "deductive"),
+            (["acta", "input.c"], "acta"),
+            (["--mode", "acta", "input.c"], "acta"),
             (["--mode", "llm", "input.c"], "llm"),
             (["input.c"], "deductive"),
             (["./llm"], "deductive"),
@@ -61,6 +63,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 "errors": [],
                 "schema_version": 1,
                 "mode": "deductive",
+                "cbmc_report": None,
             },
         )
 

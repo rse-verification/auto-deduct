@@ -6,6 +6,7 @@ on:
       - "Dockerfiles/**"
       - "bin/**"
       - "examples/ase-2024/**"
+      - "examples/acta/**"
       - "tests/**"
       - ".github/workflows/verify.yml"
   push:
@@ -15,6 +16,7 @@ on:
       - "Dockerfiles/**"
       - "bin/**"
       - "examples/ase-2024/**"
+      - "examples/acta/**"
       - "tests/**"
       - ".github/workflows/verify.yml"
   workflow_dispatch:
@@ -45,6 +47,7 @@ jobs:
     env:
       AUTODEDUCT_RUN_INTEGRATION: "1"
       AUTODEDUCT_IMAGE: auto-deduct:ci
+      ACTA_TOKEN_AVAILABLE: ${{ secrets.ACTA_GITHUB_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
@@ -73,3 +76,29 @@ jobs:
         env:
           AUTODEDUCT_RUN_LOGOS_DOCKER: "1"
         run: python -m unittest discover -s tests -p "test_logos_integration.py" -v
+      - name: Build optional AcTa verifier image
+        if: env.ACTA_TOKEN_AVAILABLE == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfiles/AutoDeductDockerfile
+          target: auto-deduct-acta-runtime
+          load: true
+          tags: auto-deduct:acta-ci
+          cache-from: type=gha
+          secrets: |
+            github_token=${{ secrets.ACTA_GITHUB_TOKEN }}
+      - name: Run host AcTa and CBMC integration
+        if: env.ACTA_TOKEN_AVAILABLE == 'true'
+        env:
+          AUTODEDUCT_RUN_ACTA_DOCKER: "1"
+          AUTODEDUCT_IMAGE: auto-deduct:acta-ci
+        run: python -m unittest discover -s tests -p "test_acta_integration.py" -v
+      - name: Run local AcTa workflow inside the verifier image
+        if: env.ACTA_TOKEN_AVAILABLE == 'true'
+        run: >-
+          docker run --rm --network none
+          -v "$PWD:/work:ro" -w /work
+          -e AUTODEDUCT_RUN_ACTA_LOCAL=1
+          auto-deduct:acta-ci
+          python3 -m unittest discover -s tests -p test_acta_integration.py -v

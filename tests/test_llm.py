@@ -146,7 +146,7 @@ class LLMModeTests(unittest.TestCase):
                 "autodeduct_pipeline.llm.shutil.which", return_value="docker" if runtime == "docker" else None
             ), patch(
                 "autodeduct_pipeline.stages._run_command", side_effect=fake_run
-            ), patch("autodeduct_pipeline.llm.subprocess.run") as cleanup:
+            ), patch("autodeduct_pipeline.runtime.subprocess.run") as cleanup:
                 cleanup.return_value = subprocess.CompletedProcess(
                     ["docker", "rm"], 1 if failure == "cleanup_failure" else 0,
                     b"", b"cannot connect to Docker daemon" if failure == "cleanup_failure" else b"",

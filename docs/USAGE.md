@@ -9,6 +9,7 @@ autodeduct --help
 autodeduct --version
 autodeduct deductive [options] SOURCE_OR_DIRECTORY
 autodeduct llm [options] SOURCE_OR_DIRECTORY
+autodeduct acta [options] SOURCE_OR_DIRECTORY
 ```
 
 These commands assume `bin/` is on the host `PATH`; use `./bin/autodeduct` from
@@ -20,12 +21,15 @@ Mode-specific guides:
 - [Deductive mode](DEDUCTIVE.md): Docker, local execution, outputs and manual stages.
 - [LLM mode](LLM.md): host setup, local versus Docker verification, Codex profiles,
   contract JSON handoff and reports.
+- [AcTa/CBMC mode](ACTA.md): existing entry contracts, local/Docker execution,
+  CBMC options, loop bounds and evidence.
 
-The default is deductive. `--mode deductive` and `--mode llm`
-flags are alternatives to the mode commands; choose one form. Reports use
-`mode: "deductive"` for deductive mode and `mode: "llm"` for LLM mode.
+The default is deductive. `--mode deductive`, `--mode llm`, and `--mode acta`
+flags are alternatives to the mode commands; choose one form. Reports retain
+`mode: "deductive"` for deductive mode, `mode: "llm"` for LLM mode, and
+`mode: "acta"` for AcTa mode.
 There is no automatic fallback between modes. Use `./llm` or `./deductive` for
-input directories with those names.
+input directories with those names; use `./acta` for a directory named `acta`.
 
 ## Common options
 
@@ -47,7 +51,7 @@ autodeduct deductive --include include \
   --frama-c-option=-cpp-extra-args=-DPLATFORM_TEST path/to/program.c
 ```
 
-Pipeline-owned arguments such as `-main`, `-wp`, `-saida` and `-isp` cannot be
+Pipeline-owned arguments such as `-main`, `-wp`, `-saida`, `-isp` and `-acta` cannot be
 changed through forwarded options. Use AutoDeduct's dedicated options.
 
 ## Input and output rules
@@ -65,7 +69,9 @@ reports cannot count as a current proof.
 
 ## Results and exit status
 
-Exit `0` means every mandatory stage and all nonzero WP goals passed. Exit `1`
+Exit `0` means every mandatory stage and all nonzero WP goals passed, or AcTa
+generated a harness and CBMC reported all properties successful, including at
+least one entry-contract assertion and any unwinding assertions. Exit `1`
 means input, environment, generation or verification failed. Argument parsing
 errors use exit `2`. Retain `report.json` and stage logs for diagnosis.
 
@@ -88,9 +94,11 @@ the [matching build and run commands](LLM.md#choose-a-custom-image-name).
 ## Docker
 
 See [deductive Docker usage](DEDUCTIVE.md#run-in-docker) or
-[LLM Docker verification](LLM.md#run-with-docker-verification).
+[LLM Docker verification](LLM.md#run-with-docker-verification), or
+[AcTa/CBMC Docker usage](ACTA.md#docker-from-the-host-launcher).
 
 ## Without Docker
 
 See [deductive local usage](DEDUCTIVE.md#run-locally) or
-[LLM local verification](LLM.md#local-verification-dependencies).
+[LLM local verification](LLM.md#local-verification-dependencies), or
+[AcTa/CBMC local setup](ACTA.md#without-docker).

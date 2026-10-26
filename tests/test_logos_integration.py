@@ -62,7 +62,7 @@ class LogosIntegrationTest(unittest.TestCase):
 class LogosDockerIntegrationTest(unittest.TestCase):
     def test_configured_provers_are_visible_with_host_uid(self):
         result = subprocess.run([
-            "docker", "run", "--rm", "--platform", "linux/amd64", "--network", "none",
+            "docker", "run", "--rm", "--platform", os.environ.get("AUTODEDUCT_PLATFORM", "linux/amd64"), "--network", "none",
             "--read-only", "--user", f"{os.getuid()}:{os.getgid()}",
             os.environ.get("AUTODEDUCT_IMAGE", "auto-deduct:latest"),
             "why3", "config", "list-provers",
@@ -86,6 +86,7 @@ class LogosDockerIntegrationTest(unittest.TestCase):
                 args = parser().parse_args([
                     "--mode", "llm", "--llm-runtime", "docker",
                     "--llm-docker-image", os.environ.get("AUTODEDUCT_IMAGE", "auto-deduct:latest"),
+                    "--llm-docker-platform", os.environ.get("AUTODEDUCT_PLATFORM", "linux/amd64"),
                     "--llm-runner", runner, "--wp-option=-wp-prover=qed", "--wp-rte",
                     "--output-dir", str(output), str(source),
                 ])

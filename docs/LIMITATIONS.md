@@ -7,13 +7,15 @@ LLM mode uses LOGOS and WP instead; its C/ACSL feature coverage and
 contract-generation reliability are **under investigation**. A feature that
 fails deductive inference is not automatically supported by LLM mode.
 
-Both workflows require review of the supplied specifications and assumptions.
+All workflows require review of the supplied specifications and assumptions.
 AutoDeduct writes generated artifacts separately from the original source.
+AcTa/CBMC uses bounded model checking with its own
+[contract subset and initialization limits](ACTA.md#results-and-limits).
 
 ## Shared input requirements
 
-Both modes currently accept one C translation unit plus its headers. The
-launcher rejects multiple `.c` inputs before either workflow starts. Generated
+All modes currently accept one C translation unit plus its headers. The
+launcher rejects multiple `.c` inputs before the selected workflow starts. Generated
 output must be separate from the selected source and input files.
 
 ## Deductive inference boundaries
@@ -60,7 +62,9 @@ Missing contracts on functions ISP considers reachable fail the
 `contract_check` stage. A contract that exists but is too weak may instead
 appear as unresolved WP goals.
 
-## Interpreting success in both modes
+## Interpreting WP success
+
+This section applies to the deductive and LLM workflows.
 
 A successful command is evidence for the selected input, entry point, tool
 versions, and generated proof obligations. It is not evidence that all C or

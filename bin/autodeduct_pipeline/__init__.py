@@ -1,4 +1,4 @@
-"""Run the AutoDeduct deductive and LLM workflows.
+"""Run the AutoDeduct deductive, LLM and AcTa/CBMC workflows.
 
 The runner deliberately keeps generated files in a separate output directory.
 The input C files are read-only from the runner's point of view.
@@ -45,6 +45,7 @@ from .diagnostics import (
 )
 from .pipeline import main, run_pipeline
 from .report import (
+    CBMCReport,
     ContractReport,
     PipelineReport,
     missing_contract_names,
@@ -93,6 +94,7 @@ __all__ = [
     "main",
     "run_pipeline",
     "ContractReport",
+    "CBMCReport",
     "PipelineReport",
     "missing_contract_names",
     "persist_report",

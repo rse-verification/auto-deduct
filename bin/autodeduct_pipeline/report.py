@@ -19,6 +19,17 @@ class ContractReport:
 
 
 @dataclass
+class CBMCReport:
+    entry_point: str
+    harness_function: str
+    unwind: int
+    properties: int
+    proved: int
+    failed_properties: list[str]
+    report_file: str
+
+
+@dataclass
 class PipelineReport:
     version: str
     status: str
@@ -29,6 +40,7 @@ class PipelineReport:
     errors: list[dict[str, str]] = field(default_factory=list)
     schema_version: int = 1
     mode: str = "deductive"
+    cbmc_report: CBMCReport | None = None
 
 
 # Convert the typed pipeline result into JSON-serializable data for automation.
@@ -135,12 +147,16 @@ def print_human_report(report: PipelineReport) -> None:
             print("Missing contracts on reachable functions: " + ", ".join(missing))
         else:
             print("Missing contracts on reachable functions: none")
+    if report.cbmc_report:
+        evidence = report.cbmc_report
+        print(f"CBMC properties: {evidence.proved}/{evidence.properties}; loop unwind bound: {evidence.unwind}")
     for error in report.errors:
         print(f"ERROR [{error['stage']}]: {error['message']}", file=sys.stderr)
 
 
 __all__ = [
     "ContractReport",
+    "CBMCReport",
     "PipelineReport",
     "report_dict",
     "persist_report",

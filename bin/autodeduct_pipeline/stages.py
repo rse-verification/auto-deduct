@@ -36,6 +36,18 @@ IGNORED_SOURCE_DIRECTORIES = frozenset({
 })
 SUPPORTED_SOURCE_SUFFIXES = frozenset({".c"})
 GENERATED_OUTPUT_NAMES = frozenset({
+    "acta-report.json",
+    "acta_verify.stdout.log",
+    "acta_verify.stderr.log",
+    "cbmc.json.stderr.log",
+    "acta-harness.c",
+    "cbmc.json",
+    "acta_image.stdout.log",
+    "acta_image.stderr.log",
+    "acta_generate.stdout.log",
+    "acta_generate.stderr.log",
+    "cbmc.stdout.log",
+    "cbmc.stderr.log",
     "logos_image.stdout.log",
     "logos_image.stderr.log",
     "logos_skill.stdout.log",

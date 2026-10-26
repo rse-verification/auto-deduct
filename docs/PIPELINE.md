@@ -34,6 +34,12 @@ AutoDeduct checks source hashes, annotation-only changes, the requested
 verification options, and complete nonzero proof goals. Saida/TriCera,
 ISP/Eva, and ISP coverage checking are not run. See [LLM mode](USAGE.md#llm-mode).
 
+With `autodeduct acta`, one `acta_verify` stage invokes AcTa to generate a
+harness, run CBMC, and write `acta-report.json`. AutoDeduct imports that report;
+AcTa owns CBMC execution and evidence interpretation. Host Docker execution
+adds `acta_image` to resolve the installed verifier image to an immutable ID.
+See [AcTa/CBMC mode](ACTA.md).
+
 ## Status Model
 
 The JSON top-level status is `passed` or `failed`; the console prints uppercase
@@ -70,6 +76,13 @@ LOGOS wrapper must finish with annotation-only output and a verifier report
 with all requested
 options and complete nonzero WP goals. The result does not include the
 deductive mode's reachable-helper coverage guarantee.
+
+In AcTa mode, AcTa must exit zero and provide a supported `passed` report
+matching the requested entry and loop bound. AutoDeduct imports its property
+counts and failing property names into `cbmc_report`, which is `null` if no
+usable verification summary was produced. AcTa owns the CBMC success checks
+and unwinding assertions. These are bounded results under the harness's
+preconditions and initialization model.
 
 A command exiting successfully is not enough by itself. AutoDeduct validates
 the generated artifacts, machine-readable contract report, and WP goal count.
