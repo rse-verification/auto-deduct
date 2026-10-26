@@ -15,7 +15,7 @@ Choose a setup before running a command:
 ## Host launcher
 
 For Windows/WSL 2, Ubuntu and macOS setup and a complete LLM Docker example,
-see the [operating-system quickstart](../README.md#llm-docker-quickstart-by-operating-system).
+see the [operating-system quickstart](LLM_DOCKER_QUICKSTART.md).
 Run the launcher in WSL 2 on Windows; the commands below use Bash/Zsh syntax.
 
 Both LLM runtimes need AutoDeduct on the host, plus Python 3.10+.
@@ -23,7 +23,7 @@ A separate package installation is unnecessary. Clone the branch and use its
 included executable:
 
 ```shell
-git clone --branch llm-skill-mode https://github.com/rse-verification/auto-deduct.git
+git clone --branch acta-integration https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 ./bin/autodeduct --version
 ```
@@ -55,7 +55,7 @@ Saida, ISP, TriCera, Frama-C/WP, LOGOS and libclang. Choose the workflow when
 running AutoDeduct; a second image build or host LOGOS checkout is unnecessary.
 
 ```shell
-git clone --branch llm-skill-mode https://github.com/rse-verification/auto-deduct.git
+git clone --branch acta-integration https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 docker build \
   -t auto-deduct:v2-rc \
