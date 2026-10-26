@@ -31,23 +31,27 @@ concurrency:
 jobs:
   unit:
     runs-on: ubuntu-24.04
+    outputs:
+      acta_access: ${{ steps.acta_access.outputs.available }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: Check private dependency access
+        id: acta_access
+        env:
+          ACTA_TOKEN_AVAILABLE: ${{ secrets.ACTA_GITHUB_TOKEN != '' }}
+        run: echo "available=$ACTA_TOKEN_AVAILABLE" >> "$GITHUB_OUTPUT"
       - name: Run unit tests
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
-  public-regression-matrix:
-    name: Public regression matrix
+  toolchain-regression-matrix:
+    name: Toolchain regression matrix
     needs: unit
+    if: needs.unit.outputs.acta_access == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    env:
-      AUTODEDUCT_RUN_INTEGRATION: "1"
-      AUTODEDUCT_IMAGE: auto-deduct:ci
-      ACTA_TOKEN_AVAILABLE: ${{ secrets.ACTA_GITHUB_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
@@ -58,47 +62,50 @@ jobs:
           load: true
           tags: auto-deduct:ci
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          secrets: |
+            github_token=${{ secrets.ACTA_GITHUB_TOKEN }}
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Run ASE 2024 smoke regression
+        env:
+          AUTODEDUCT_RUN_INTEGRATION: "1"
+          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_ase_2024_integration.py" -v
       - name: Run supported microtests
+        env:
+          AUTODEDUCT_RUN_INTEGRATION: "1"
+          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_public_microtests_integration.py" -v
       - name: Run verified-warning microtests
+        env:
+          AUTODEDUCT_RUN_INTEGRATION: "1"
+          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_expected_warning_integration.py" -v
       - name: Run expected-limitation microtests
+        env:
+          AUTODEDUCT_RUN_INTEGRATION: "1"
+          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_expected_limitation_integration.py" -v
       - name: Run expected-incomplete-WP microtests
+        env:
+          AUTODEDUCT_RUN_INTEGRATION: "1"
+          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_expected_incomplete_wp_integration.py" -v
       - name: Run host LOGOS integration against the standard image
         env:
           AUTODEDUCT_RUN_LOGOS_DOCKER: "1"
+          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_logos_integration.py" -v
-      - name: Build optional AcTa verifier image
-        if: env.ACTA_TOKEN_AVAILABLE == 'true'
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Dockerfiles/AutoDeductDockerfile
-          target: auto-deduct-acta-runtime
-          load: true
-          tags: auto-deduct:acta-ci
-          cache-from: type=gha
-          secrets: |
-            github_token=${{ secrets.ACTA_GITHUB_TOKEN }}
       - name: Run host AcTa and CBMC integration
-        if: env.ACTA_TOKEN_AVAILABLE == 'true'
         env:
           AUTODEDUCT_RUN_ACTA_DOCKER: "1"
-          AUTODEDUCT_IMAGE: auto-deduct:acta-ci
+          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_acta_integration.py" -v
       - name: Run local AcTa workflow inside the verifier image
-        if: env.ACTA_TOKEN_AVAILABLE == 'true'
         run: >-
           docker run --rm --network none
           -v "$PWD:/work:ro" -w /work
           -e AUTODEDUCT_RUN_ACTA_LOCAL=1
-          auto-deduct:acta-ci
+          auto-deduct:ci
           python3 -m unittest discover -s tests -p test_acta_integration.py -v

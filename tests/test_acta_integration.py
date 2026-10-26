@@ -41,7 +41,7 @@ class ActaIntegrationCases:
             (headers / "limit.h").write_text("#define LIMIT 8\n")
             args = parser().parse_args([
                 "--mode", "acta", "--acta-runtime", self.runtime,
-                "--acta-docker-image", os.environ.get("AUTODEDUCT_IMAGE", "auto-deduct:acta"),
+                "--acta-docker-image", os.environ.get("AUTODEDUCT_IMAGE", "auto-deduct:latest"),
                 "--acta-docker-platform", os.environ.get("AUTODEDUCT_PLATFORM", "linux/amd64"),
                 "--cbmc-unwind", str(unwind), "--timeout", "120",
                 "--entry-point", "compute", "--include", str(headers),

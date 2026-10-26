@@ -14,35 +14,29 @@ For AcTa's implementation, build instructions and standalone CLI, see the
 [upstream repository](https://github.com/rse-verification/AcTa#readme).
 This guide covers its integration with AutoDeduct.
 
+## Frama-C 33 compatibility
+
+AutoDeduct uses Frama-C 33 for every workflow. AcTa and CBMC are included in
+the standard Docker build, using the same default opam switch as Saida and ISP.
+There is no separate AcTa image or Frama-C 31 installation.
+
+The image pins AcTa revision `46c5b15807c204736cd08588d0fb5bd02b0a0d2c`,
+which supports Frama-C 33 and the verification-report interface. The build
+checks AcTa's dependencies while keeping the shared Frama-C version fixed.
+
 ## Docker from the host launcher
 
-Build or load the optional `auto-deduct-acta-runtime` image first. It extends
-the standard image with AcTa, its Frama-C frontend, and CBMC. There is no host AcTa,
-Frama-C, CBMC, Codex or LOGOS installation requirement for this workflow.
+Build or load the standard `auto-deduct:latest` image using the
+[installation guide](INSTALLATION.md#standard-docker-image). The build includes
+AcTa, CBMC and the shared Frama-C 33 installation. It currently requires GitHub
+read access to AcTa; see [build credentials](INSTALLATION.md#github-access-for-image-builds).
 Host Python 3.10+ and Docker are required. Use WSL 2 on Windows.
-
-AcTa is currently a private repository. Your account needs read access.
-With GitHub CLI authenticated, build from the AutoDeduct checkout:
-
-```shell
-GH_TOKEN="$(gh auth token)" docker build --platform linux/amd64 \
-  --secret id=github_token,env=GH_TOKEN \
-  --target auto-deduct-acta-runtime -t auto-deduct:acta \
-  -f Dockerfiles/AutoDeductDockerfile .
-```
-
-The token is used through a temporary BuildKit secret. It is not passed as a
-build argument or embedded in Git URLs, image layers or the runtime environment.
-For a publicly accessible AcTa fork, the secret can be omitted and the build
-can select its repository/ref through `ACTA_REPO` and `ACTA_VER`. The default
-public image target is unchanged and does not require AcTa access.
 
 Then run:
 
 ```shell
 ./bin/autodeduct acta examples/acta/increment.c \
   --entry-point compute --acta-runtime docker \
-  --acta-docker-image auto-deduct:acta \
   --output-dir /tmp/autodeduct-acta --json
 ```
 
@@ -63,7 +57,7 @@ You can also run the whole AcTa workflow inside an existing image. The default
 mkdir -p /tmp/autodeduct-acta
 docker run --rm --platform linux/amd64 --network none \
   -v "$PWD:/work:ro" -v /tmp/autodeduct-acta:/output -w /work \
-  auto-deduct:acta autodeduct acta examples/acta/increment.c \
+  auto-deduct:latest autodeduct acta examples/acta/increment.c \
   --entry-point compute --output-dir /output --json
 ```
 
@@ -72,20 +66,11 @@ the host instead.
 
 ## Without Docker
 
-Install Python 3.10+, the AutoDeduct launcher, a compatible AcTa/Frama-C
-installation, CBMC, and a C preprocessor on the local PATH. The pinned AcTa
-revision requires Frama-C 31.x. Keep it in a separate opam switch if you also
-use AutoDeduct's Frama-C 33 toolchain.
-
-Build and install the report-enabled AcTa revision using its
-[upstream instructions](https://github.com/rse-verification/AcTa/tree/autodeduct-adoptation#build).
-The Docker image pins revision `cbfedef2058bf101a35361a3c9cd0d5d5215f5b4`.
-If using a separate opam switch, select its frontend for AutoDeduct:
-
-```shell
-eval "$(opam env --switch=acta --set-switch)"
-export AUTODEDUCT_ACTA_FRAMA_C="$(opam var bin)/frama-c"
-```
+Install Python 3.10+, the AutoDeduct launcher, Frama-C 33 with a compatible
+report-enabled AcTa plugin, CBMC, and a C preprocessor on the local PATH.
+Follow AcTa's [upstream build instructions](https://github.com/rse-verification/AcTa/tree/autodeduct-adoptation#build)
+for that compatible revision. The same `frama-c` executable is used
+by all AutoDeduct workflows.
 
 Install CBMC from its [official releases](https://github.com/diffblue/cbmc/releases/tag/cbmc-6.11.0).
 Then, from the AutoDeduct checkout:
@@ -109,9 +94,9 @@ The timeout covers the whole AcTa invocation, including harness generation and C
 | Option | Purpose |
 | --- | --- |
 | `--acta-runtime local\|docker` | Execution location; default `local` |
-| `--acta-docker-image IMAGE` | Existing image; default `auto-deduct:acta` |
+| `--acta-docker-image IMAGE` | Existing image; default `auto-deduct:latest` |
 | `--acta-docker-platform PLATFORM` | Docker architecture; default `linux/amd64` |
-| `--acta-frama-c EXECUTABLE` | AcTa frontend executable, or `AUTODEDUCT_ACTA_FRAMA_C`; default `frama-c` locally and `acta-frama-c` for the host Docker runtime |
+| `--acta-frama-c EXECUTABLE` | AcTa frontend executable, or `AUTODEDUCT_ACTA_FRAMA_C`; default `frama-c` in the selected runtime |
 | `--acta-plugin CMXS` | Local uninstalled plugin, or `AUTODEDUCT_ACTA_PLUGIN` |
 | `--cbmc EXECUTABLE` | CBMC executable, or `AUTODEDUCT_CBMC`; default `cbmc` |
 | `--cbmc-unwind N` | Positive loop bound; default `10`; unwinding assertions stay enabled |
@@ -165,15 +150,10 @@ the harness does not make all global state symbolic. Unsupported ACSL, including
 named predicates, can stop harness generation. See
 [AcTa issue #3](https://github.com/rse-verification/AcTa/issues/3).
 
-AcTa remains a Frama-C plugin at the pinned revision. The optional image keeps
-its Frama-C 31 installation in a separate switch and exposes it through
-`acta-frama-c`; the main Frama-C 33 installation continues to serve the
-deductive and LOGOS workflows.
-
 ## Integration checks
 
 ```shell
-AUTODEDUCT_RUN_ACTA_DOCKER=1 AUTODEDUCT_IMAGE=auto-deduct:acta \
+AUTODEDUCT_RUN_ACTA_DOCKER=1 AUTODEDUCT_IMAGE=auto-deduct:latest \
 python3 -m unittest discover -s tests -p test_acta_integration.py -v
 ```
 
@@ -182,7 +162,6 @@ cover a correct contract, a counterexample, insufficient and sufficient loop
 unwinding, unsupported/missing contracts, headers, custom entry points, and
 paths containing spaces. No LLM calls are involved.
 
-CI runs these real-tool checks when the repository secret `ACTA_GITHUB_TOKEN`
-contains a token with read access to AcTa. Without that secret, the public
-regressions and offline AcTa tests still run; private-source integration steps
-are skipped.
+CI builds the standard image and runs the toolchain checks when the repository
+secret `ACTA_GITHUB_TOKEN` has read access to AcTa. Without it, the image and
+toolchain checks are skipped; offline unit checks still run.

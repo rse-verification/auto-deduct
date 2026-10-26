@@ -104,7 +104,7 @@ def import_acta_report(path, args):
 
 def run_acta_workflow(args, source, output_dir, report):
     docker = args.acta_runtime == "docker"
-    frontend = args.acta_frama_c or ("acta-frama-c" if docker else "frama-c")
+    frontend = args.acta_frama_c or "frama-c"
     if not docker and shutil.which(frontend) is None:
         report.errors.append({"stage": "environment", "message": f"required AcTa executable not found: {frontend}"})
         return report

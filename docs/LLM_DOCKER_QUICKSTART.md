@@ -8,7 +8,9 @@ The standard image supplies LOGOS, libclang, Frama-C and provers. Choose your
 platform setup, then use the shared build/run commands below. The launcher
 is included in the checkout; a separate AutoDeduct package installation or
 local LOGOS clone is unnecessary for this Docker workflow. Build or load the
-image first; the launcher does not build or pull it automatically.
+image first; the launcher does not build or pull it automatically. Building needs
+[GitHub access to AcTa](INSTALLATION.md#github-access-for-image-builds). Set
+`GH_TOKEN` before using the shared build commands below.
 
 ## Windows (WSL 2)
 
@@ -135,7 +137,7 @@ export PATH="$PWD/bin:$PATH"
 autodeduct --version
 autodeduct llm --help
 
-docker build --platform linux/amd64 \
+docker build --secret id=github_token,env=GH_TOKEN --platform linux/amd64 \
   -t auto-deduct:latest \
   -f Dockerfiles/AutoDeductDockerfile .
 

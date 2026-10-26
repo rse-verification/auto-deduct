@@ -71,10 +71,12 @@ autodeduct llm --llm-runtime local --timeout 1200 \
 ## Build the verifier image
 
 Run these commands **on the host, from the AutoDeduct checkout** after starting
-Docker. The standard image includes LOGOS, Saida, ISP and TriCera:
+Docker. The standard image includes LOGOS, Saida, ISP, TriCera, AcTa and CBMC.
+Prepare the [GitHub build credentials](INSTALLATION.md#github-access-for-image-builds)
+and use the shared [Frama-C 33 setup](ACTA.md#frama-c-33-compatibility):
 
 ```shell
-docker build \
+docker build --secret id=github_token,env=GH_TOKEN \
   -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
 ```
 
@@ -139,7 +141,7 @@ then pass the same name and tag with `--llm-docker-image`:
 
 ```shell
 # From the AutoDeduct checkout; on Apple Silicon add --platform linux/amd64.
-docker build -t my-autodeduct:llm \
+docker build --secret id=github_token,env=GH_TOKEN -t my-autodeduct:llm \
   -f Dockerfiles/AutoDeductDockerfile .
 
 autodeduct llm --llm-runtime docker \

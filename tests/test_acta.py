@@ -41,6 +41,7 @@ class ActaTests(unittest.TestCase):
                 if runtime == "docker":
                     self.assertEqual(command[:2], ["docker", "run"])
                     self.assertIn(IMAGE_ID, command)
+                    self.assertIn("frama-c", command)
                     self.assertIn("--read-only", command)
                     self.assertEqual(command[command.index("--network") + 1], "none")
                     self.assertIn(f"type=bind,source={source.parent},target={source.parent},readonly", command)
@@ -96,6 +97,9 @@ class ActaTests(unittest.TestCase):
             return report, commands
 
     def test_local_and_docker_import_the_acta_report(self):
+        defaults = parser().parse_args(["input.c"])
+        self.assertEqual(defaults.acta_docker_image, defaults.llm_docker_image)
+        self.assertEqual(defaults.acta_docker_image, "auto-deduct:latest")
         for runtime in ("local", "docker"):
             with self.subTest(runtime=runtime):
                 report, commands = self.exercise(runtime=runtime)

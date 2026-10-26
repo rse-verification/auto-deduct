@@ -108,7 +108,7 @@ def parser() -> argparse.ArgumentParser:
         help="run AcTa and CBMC locally or in Docker (default: local)",
     )
     result.add_argument(
-        "--acta-docker-image", default="auto-deduct:acta", metavar="IMAGE",
+        "--acta-docker-image", default="auto-deduct:latest", metavar="IMAGE",
         help="existing local AcTa/CBMC image for --acta-runtime docker; never built or pulled automatically (default: %(default)s)",
     )
     result.add_argument(
@@ -117,7 +117,7 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument(
         "--acta-frama-c", default=os.environ.get("AUTODEDUCT_ACTA_FRAMA_C"), metavar="EXECUTABLE",
-        help="AcTa's Frama-C executable (or AUTODEDUCT_ACTA_FRAMA_C); defaults to frama-c locally, acta-frama-c in Docker",
+        help="AcTa's Frama-C executable (or AUTODEDUCT_ACTA_FRAMA_C); default: frama-c in the selected runtime",
     )
     result.add_argument(
         "--acta-plugin", default=os.environ.get("AUTODEDUCT_ACTA_PLUGIN"), metavar="CMXS",

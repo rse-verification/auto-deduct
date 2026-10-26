@@ -222,7 +222,7 @@ RUN ln -s /home/dev/repos/tricera/tri && \
 ##
 # Stage 5 - Add AutoDeduct Frama-C plugins and CLI
 #
-# The CLI selects the deductive or LLM workflow at runtime.
+# The CLI selects the deductive, LLM or AcTa workflow at runtime.
 #
 FROM auto-deduct-tricera AS auto-deduct-runtime
 
@@ -271,42 +271,6 @@ WORKDIR /home/dev
 CMD ["/usr/bin/bash", "-l"]
 
 ##
-# Build AcTa against its supported Frama-C without downgrading the main switch.
-# Ubuntu's system OCaml is sufficient for this separate frontend.
-#
-FROM auto-deduct-base AS auto-deduct-acta
-
-ARG ACTA_REPO="https://github.com/rse-verification/AcTa.git"
-ARG ACTA_VER="cbfedef2058bf101a35361a3c9cd0d5d5215f5b4"
-ARG ACTA_FRAMA_C_VER="31.0"
-
-USER dev
-WORKDIR /home/dev/repos
-RUN opam init --bare --disable-sandboxing --yes && \
-  opam switch create acta ocaml-system --yes && \
-  eval "$(opam env --switch=acta --set-switch)" && \
-  opam install "frama-c.${ACTA_FRAMA_C_VER}" --yes
-
-COPY --chmod=0755 Dockerfiles/github-askpass /tmp/github-askpass
-RUN --mount=type=secret,id=github_token,mode=0444 \
-  : "${ACTA_REPO:?ACTA_REPO must not be empty}" && \
-  : "${ACTA_VER:?ACTA_VER must not be empty}" && \
-  eval "$(opam env --switch=acta --set-switch)" && \
-  if [ -s /run/secrets/github_token ]; then export GIT_ASKPASS=/tmp/github-askpass; fi && \
-  GIT_TERMINAL_PROMPT=0 git clone --depth 1 --no-checkout "${ACTA_REPO}" acta && \
-  cd acta && \
-  GIT_TERMINAL_PROMPT=0 git fetch --depth 1 origin "${ACTA_VER}" && \
-  git checkout --detach FETCH_HEAD && \
-  git rev-parse HEAD > REVISION
-
-RUN eval "$(opam env --switch=acta --set-switch)" && \
-  cd /home/dev/repos/acta && \
-  dune build @install && \
-  dune install && \
-  frama-c -acta-help && \
-  opam clean --all-switches --logs --download-cache --yes
-
-##
 # Stage 6 - Add LOGOS to the standard toolchain
 #
 FROM auto-deduct-runtime AS auto-deduct-logos
@@ -346,11 +310,13 @@ RUN PYTHONPATH=/opt/logos/skill/scripts python3 -c \
 WORKDIR /home/dev
 
 ##
-# Optional AcTa/CBMC image. AcTa repository access is needed only for this target.
-# Select with --target auto-deduct-acta-runtime.
+# Stage 7 - Install AcTa and CBMC in the standard image
 #
-FROM auto-deduct-logos AS auto-deduct-acta-runtime
+FROM auto-deduct-logos AS auto-deduct
 
+ARG FRAMA_C_VER
+ARG ACTA_REPO="https://github.com/rse-verification/AcTa.git"
+ARG ACTA_VER="46c5b15807c204736cd08588d0fb5bd02b0a0d2c"
 ARG CBMC_VER="6.11.0"
 ARG CBMC_SHA256_AMD64="b3721aa541038384d7801ea3aeabbcddc3e8845ac8f1cbff637cf8dec7481ac8"
 ARG CBMC_SHA256_ARM64="9eb8f41a7dcda8eac6338b8367d77831431f767691e4535209925bd85e315ae7"
@@ -368,16 +334,33 @@ RUN case "$(dpkg --print-architecture)" in \
   echo "${checksum}  /tmp/cbmc.deb" | sha256sum --check --strict && \
   apt-get update && \
   apt-get install --yes --no-install-recommends /tmp/cbmc.deb gcc && \
-  rm -rf /tmp/cbmc.deb /var/lib/apt/lists/*
+  rm -rf /tmp/cbmc.deb /var/lib/apt/lists/* && \
+  mkdir -p /opt/acta && chown dev:dev /opt/acta
 
-COPY --from=auto-deduct-acta --chown=dev:dev /home/dev/.opam/acta /home/dev/.opam/acta
-COPY --from=auto-deduct-acta /home/dev/repos/acta/REVISION /opt/acta/REVISION
-COPY --from=auto-deduct-acta /home/dev/repos/acta/LICENSE /opt/acta/LICENSE
-COPY --chmod=0755 bin/acta-frama-c /usr/local/bin/acta-frama-c
-ENV AUTODEDUCT_ACTA_FRAMA_C=acta-frama-c
-
+COPY --chmod=0755 Dockerfiles/github-askpass /tmp/github-askpass
 USER dev
-RUN cbmc --version && acta-frama-c -acta-help
+WORKDIR /home/dev/repos
+RUN --mount=type=secret,id=github_token,mode=0444 \
+  : "${ACTA_REPO:?ACTA_REPO must not be empty}" && \
+  : "${ACTA_VER:?ACTA_VER must not be empty}" && \
+  if [ -s /run/secrets/github_token ]; then export GIT_ASKPASS=/tmp/github-askpass; fi && \
+  GIT_TERMINAL_PROMPT=0 git clone --depth 1 --no-checkout "${ACTA_REPO}" acta && \
+  cd acta && \
+  GIT_TERMINAL_PROMPT=0 git fetch --depth 1 origin "${ACTA_VER}" && \
+  git checkout --detach FETCH_HEAD && \
+  git rev-parse HEAD > REVISION
 
-# Keep the default public build independent of private AcTa repository access.
-FROM auto-deduct-logos AS auto-deduct
+# Keep Frama-C fixed while checking AcTa dependencies; never downgrade it to 31.
+# ACTA_VER must select a report-enabled revision compatible with Frama-C 33.
+RUN : "${FRAMA_C_VER:?FRAMA_C_VER must not be empty}" && \
+  eval "$(opam env --switch=default --set-switch)" && \
+  cd /home/dev/repos/acta && \
+  opam install --deps-only . "frama-c.${FRAMA_C_VER}" --yes && \
+  dune build @install && \
+  dune install && \
+  cp REVISION LICENSE /opt/acta/ && \
+  frama-c -acta-help && cbmc --version && \
+  opam clean --logs --download-cache --yes && \
+  rm -rf /home/dev/repos/acta
+
+WORKDIR /home/dev

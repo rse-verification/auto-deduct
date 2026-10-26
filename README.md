@@ -15,20 +15,21 @@ reports go into a separate output directory; the original source stays unchanged
 | `llm` | Generates contracts with host Codex using [LOGOS](https://github.com/rse-verification/logos), then checks them with Frama-C WP | [LLM guide](docs/LLM.md) · [Platform quickstart](docs/LLM_DOCKER_QUICKSTART.md) |
 | `acta` | Uses [AcTa](https://github.com/rse-verification/AcTa) to generate a harness from an existing entry contract and check it with CBMC | [AcTa/CBMC guide](docs/ACTA.md) |
 
-All three workflows support local tools or Docker. LLM mode runs Codex on the
-host in both cases. AcTa uses an optional image target that currently requires
-read access to its repository; see its guide before building.
+All three workflows support local tools or the same standard Docker image.
+The image includes AcTa and CBMC by default and uses Frama-C 33 throughout.
+LLM mode runs Codex on the host in both cases.
 
 ## Quick start: deductive verification in Docker
 
-Requires Git and Docker running Linux containers. Use Bash/Zsh, or Ubuntu inside
-WSL 2 on Windows. The current standard toolchain targets `linux/amd64`.
+Requires Git, Docker running Linux containers, and a `GH_TOKEN` with read access
+to AcTa; see [build credentials](docs/INSTALLATION.md#github-access-for-image-builds).
+Use Bash/Zsh, or Ubuntu inside WSL 2 on Windows. The current standard toolchain targets `linux/amd64`.
 
 ```shell
 git clone --branch acta-integration https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 
-docker build --platform linux/amd64 \
+docker build --secret id=github_token,env=GH_TOKEN --platform linux/amd64 \
   -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
 
 docker run --rm --platform linux/amd64 \
