@@ -1,4 +1,4 @@
-# AutoDeduct V2 “Double Ducks”
+# AutoDeduct “Double Ducks”
 
 **Release candidate.** AutoDeduct generates and verifies ACSL contracts for C
 programs. Choose deductive inference, LLM-assisted contract generation, or

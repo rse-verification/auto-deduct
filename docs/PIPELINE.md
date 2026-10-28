@@ -138,7 +138,7 @@ useful generated files are:
 
 Every report contains `schema_version`. This branch writes schema version
 `1`; the separate `version` field identifies the AutoDeduct CLI release.
-AutoDeduct V2 adds `mode` to schema version `1`; consumers of earlier reports
+Reports include `mode` in schema version `1`; consumers of earlier reports
 may treat its absence as `deductive`.
 
 Use `autodeduct --json ...` when another program or CI job needs the same
