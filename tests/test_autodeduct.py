@@ -118,7 +118,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
             MODULE.validate_forwarded_options(args)
 
         self.assertEqual(raised.exception.stage, "input")
-        self.assertIn("pipeline-owned option -main", raised.exception.message)
+        self.assertIn("pipeline-owned option -main", str(raised.exception))
 
     def test_pipeline_owned_wp_option_is_rejected(self):
         args = MODULE.parser().parse_args(
@@ -129,7 +129,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
             MODULE.validate_forwarded_options(args)
 
         self.assertEqual(raised.exception.stage, "input")
-        self.assertIn("pipeline-owned option -no-wp", raised.exception.message)
+        self.assertIn("pipeline-owned option -no-wp", str(raised.exception))
 
     def test_supported_forwarded_options_are_accepted(self):
         args = MODULE.parser().parse_args(
@@ -233,8 +233,8 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.run_pipeline(args)
 
             self.assertEqual(raised.exception.stage, "input")
-            self.assertIn("exactly one C translation unit", raised.exception.message)
-            self.assertIn("provide one .c file", raised.exception.message)
+            self.assertIn("exactly one C translation unit", str(raised.exception))
+            self.assertIn("provide one .c file", str(raised.exception))
 
     def test_directory_inputs_accept_uppercase_c_extension(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -265,7 +265,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.source_paths([str(source)])
 
             self.assertEqual(raised.exception.stage, "input")
-            self.assertIn("unsupported source file type", raised.exception.message)
+            self.assertIn("unsupported source file type", str(raised.exception))
 
     def test_cli_does_not_write_report_on_input_error(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -328,7 +328,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.validate_output_directory([source], output, [project])
 
             self.assertEqual(raised.exception.stage, "output")
-            self.assertIn("overlaps the input source tree", raised.exception.message)
+            self.assertIn("overlaps the input source tree", str(raised.exception))
 
     def test_output_directory_cannot_be_an_ancestor_of_input_tree(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -342,7 +342,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.validate_output_directory([source], output, [project])
 
             self.assertEqual(raised.exception.stage, "output")
-            self.assertIn("overlaps", raised.exception.message)
+            self.assertIn("overlaps", str(raised.exception))
 
     def test_output_symlink_resolving_inside_input_tree_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -436,7 +436,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 )
 
             self.assertEqual(raised.exception.stage, "output")
-            self.assertIn("not a directory", raised.exception.message)
+            self.assertIn("not a directory", str(raised.exception))
             self.assertEqual(output.read_text(encoding="utf-8"), "keep\n")
 
     def test_prepare_output_directory_removes_only_known_artifacts(self):
@@ -478,7 +478,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                     MODULE.prepare_output_directory(output)
 
             self.assertEqual(raised.exception.stage, "output")
-            self.assertIn("could not prepare output directory", raised.exception.message)
+            self.assertIn("could not prepare output directory", str(raised.exception))
 
     def test_directory_without_c_files_is_an_input_error(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -486,7 +486,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.source_paths([temp])
 
             self.assertEqual(raised.exception.stage, "input")
-            self.assertIn("no C source files", raised.exception.message)
+            self.assertIn("no C source files", str(raised.exception))
 
     def test_unreadable_source_directory_is_an_input_error(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -502,7 +502,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                     MODULE.source_paths([temp])
 
             self.assertEqual(raised.exception.stage, "input")
-            self.assertIn("could not read source directory", raised.exception.message)
+            self.assertIn("could not read source directory", str(raised.exception))
 
     def test_source_directories_are_forwarded_for_generated_sources(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -523,7 +523,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.missing_contract_names(report)
 
             self.assertEqual(raised.exception.stage, "contract_check")
-            self.assertIn("did not produce", raised.exception.message)
+            self.assertIn("did not produce", str(raised.exception))
 
     def test_malformed_isp_missing_helper_entry_is_an_explicit_error(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -537,7 +537,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.missing_contract_names(report)
 
             self.assertEqual(raised.exception.stage, "contract_check")
-            self.assertIn("malformed missing-helper entry", raised.exception.message)
+            self.assertIn("malformed missing-helper entry", str(raised.exception))
 
     def test_cli_runs_all_stages_and_keeps_missing_report(self):
         with tempfile.TemporaryDirectory() as temp:

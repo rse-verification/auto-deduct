@@ -208,7 +208,7 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
     try:
         plugin_missing = missing_contract_names(output_dir / MISSING_CONTRACT_OUTPUT)
     except PipelineError as error:
-        report.errors.append({"stage": error.stage, "message": error.message})
+        report.errors.append({"stage": error.stage, "message": str(error)})
         return report
 
     report.contract_report = ContractReport(
@@ -287,7 +287,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             status="failed",
             input_files=list(args.sources),
             output_directory=str(Path(args.output_dir).expanduser().resolve()),
-            errors=[{"stage": error.stage, "message": error.message}],
+            errors=[{"stage": error.stage, "message": str(error)}],
         )
     except OSError as error:
         report = PipelineReport(

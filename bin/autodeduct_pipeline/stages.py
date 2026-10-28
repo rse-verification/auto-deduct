@@ -86,7 +86,6 @@ class PipelineError(Exception):
     def __init__(self, stage: str, message: str):
         super().__init__(message)
         self.stage = stage
-        self.message = message
 
 
 @dataclass
