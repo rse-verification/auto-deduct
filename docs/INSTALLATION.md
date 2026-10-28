@@ -96,8 +96,8 @@ docker run --rm --platform linux/amd64 \
 ## Component Versions
 
 The default image uses OCaml 5.4.0, Frama-C 33.0, ISP `v0.4.0`, Saida
-`v0.6.0`, and TriCera `v0.5`. All three analysis components are pinned to
-releases. OCaml is installed in the image's default opam switch rather than
+`v0.6.0`, and TriCera `v0.5`. Saida is pinned to release commit
+`605a4a4ae976050ec5e1060fec621ef4d6157f68`; ISP and TriCera use release tags. OCaml is installed in the image's default opam switch rather than
 inherited from the Ubuntu package version.
 LOGOS is pinned to commit `cea177911b6ad5176122b4b3c415f92897c464d2`
 on its `main` branch.

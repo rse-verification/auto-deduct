@@ -71,7 +71,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
         defaults = {
             "FRAMA_C_VER": "33.0",
             "OCAML_VER": "5.4.0",
-            "SAIDA_VER": "v0.6.0",
+            "SAIDA_VER": "605a4a4ae976050ec5e1060fec621ef4d6157f68",
             "TRICERA_VER": "v0.5",
             "ISP_VER": "v0.4.0",
         }
