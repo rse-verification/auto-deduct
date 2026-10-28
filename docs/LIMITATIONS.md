@@ -1,4 +1,4 @@
-# AutoDeduct V2 limitations
+# AutoDeduct limitations
 
 [Documentation index](README.md) · [Deductive mode](DEDUCTIVE.md) · [LLM mode](LLM.md)
 

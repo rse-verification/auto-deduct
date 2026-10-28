@@ -1,4 +1,4 @@
-# AutoDeduct V2 documentation
+# AutoDeduct documentation
 
 Start with setup, then choose a usage guide.
 
