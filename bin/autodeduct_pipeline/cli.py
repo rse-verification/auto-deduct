@@ -70,8 +70,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--version", action="version", version=f"AutoDeduct {VERSION}")
     result.add_argument("--json", action="store_true", help="print the final report as JSON")
     result.add_argument(
-        "--mode", choices=("deterministic", "llm"), default="deterministic",
-        help="alternative to the llm/deductive command; default: deterministic",
+        "--mode", choices=("deductive", "llm"), default="deductive",
+        help="alternative to the llm/deductive command; default: deductive",
     )
     result.add_argument(
         "--llm-skill", default=os.environ.get("AUTODEDUCT_LLM_SKILL"),

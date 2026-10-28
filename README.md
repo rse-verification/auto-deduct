@@ -12,8 +12,8 @@ reports go into a separate output directory; the original input stays unchanged.
 | `autodeduct llm` | Host Codex using [LOGOS](https://github.com/rse-verification/logos) | LOGOS wrapper runs Frama-C WP; AutoDeduct validates its evidence |
 
 Both workflows use deductive verification. The command names distinguish how
-contracts are generated. The default is `deductive`; existing
-`--mode deterministic` and `--mode llm` flags remain available.
+contracts are generated. The default is `deductive`. You can also select a workflow with
+`--mode deductive` or `--mode llm`.
 
 ## Start here
 

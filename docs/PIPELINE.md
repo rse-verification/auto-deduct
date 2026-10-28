@@ -7,7 +7,7 @@ C parser, call graph, abstract interpreter, or theorem prover itself.
 
 ## Stage Flow
 
-The following stages apply to the default deterministic mode.
+The following stages apply to the default deductive mode.
 
 | Stage | Component | Responsibility | Main artifact |
 | --- | --- | --- | --- |
@@ -57,7 +57,7 @@ program can still be completely verified.
 
 ## Acceptance Criteria
 
-In deterministic mode, AutoDeduct returns exit code `0` only when:
+In deductive mode, AutoDeduct returns exit code `0` only when:
 
 1. the input and environment are valid;
 2. parsing succeeds;
@@ -69,7 +69,7 @@ In LLM mode, the host skill must return source-matched contract JSON, and the
 LOGOS wrapper must finish with annotation-only output and a verifier report
 with all requested
 options and complete nonzero WP goals. The result does not include the
-deterministic mode's reachable-helper coverage guarantee.
+deductive mode's reachable-helper coverage guarantee.
 
 A command exiting successfully is not enough by itself. AutoDeduct validates
 the generated artifacts, machine-readable contract report, and WP goal count.
@@ -126,7 +126,7 @@ useful generated files are:
 Every report contains `schema_version`. This branch writes schema version
 `1`; the separate `version` field identifies the AutoDeduct CLI release.
 AutoDeduct V2 adds `mode` to schema version `1`; consumers of earlier reports
-may treat its absence as `deterministic`.
+may treat its absence as `deductive`.
 
 Use `autodeduct --json ...` when another program or CI job needs the same
 result as machine-readable standard output.

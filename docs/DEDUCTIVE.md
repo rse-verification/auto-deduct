@@ -4,7 +4,7 @@
 
 This mode runs Frama-C parsing, Saida/TriCera contract inference, ISP/Eva auxiliary
 annotation inference, reachable-helper coverage checks, then WP verification.
-It is the default; `deductive` and `--mode deterministic` select the same path.
+It is the default; `deductive` and `--mode deductive` select the same path.
 
 ## Run in Docker
 

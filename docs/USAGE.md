@@ -21,9 +21,9 @@ Mode-specific guides:
 - [LLM mode](LLM.md): host setup, local versus Docker verification, Codex profiles,
   contract JSON handoff and reports.
 
-The default is deductive. Existing `--mode deterministic` and `--mode llm`
-flags are alternatives to the mode commands; choose one form. Reports retain
-`mode: "deterministic"` for deductive mode and `mode: "llm"` for LLM mode.
+The default is deductive. `--mode deductive` and `--mode llm`
+flags are alternatives to the mode commands; choose one form. Reports use
+`mode: "deductive"` for deductive mode and `mode: "llm"` for LLM mode.
 There is no automatic fallback between modes. Use `./llm` or `./deductive` for
 input directories with those names.
 

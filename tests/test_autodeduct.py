@@ -18,13 +18,13 @@ STAGES = import_module("autodeduct_pipeline.stages")
 
 
 class AutoDeductPipelineTests(unittest.TestCase):
-    def test_mode_commands_dispatch_and_preserve_existing_cli(self):
+    def test_mode_commands_and_flags_dispatch(self):
         for words, expected in (
             (["llm", "input.c"], "llm"),
-            (["deductive", "input.c"], "deterministic"),
+            (["deductive", "input.c"], "deductive"),
             (["--mode", "llm", "input.c"], "llm"),
-            (["input.c"], "deterministic"),
-            (["./llm"], "deterministic"),
+            (["input.c"], "deductive"),
+            (["./llm"], "deductive"),
         ):
             with self.subTest(arguments=words), patch(
                 "autodeduct_pipeline.pipeline.run_pipeline",
@@ -34,7 +34,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 self.assertEqual(run.call_args.args[0].mode, expected)
                 self.assertEqual(run.call_args.args[0].sources, [words[-1]])
         for words in (
-            ["llm", "--mode", "deterministic", "input.c"],
+            ["llm", "--mode", "deductive", "input.c"],
             ["deductive", "--mode=llm", "input.c"],
         ):
             with self.subTest(arguments=words), self.assertRaises(SystemExit) as error:
@@ -60,7 +60,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 "contract_report": None,
                 "errors": [],
                 "schema_version": 1,
-                "mode": "deterministic",
+                "mode": "deductive",
             },
         )
 
