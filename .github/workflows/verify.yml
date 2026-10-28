@@ -52,6 +52,9 @@ jobs:
     if: needs.unit.outputs.acta_access == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    env:
+      AUTODEDUCT_RUN_INTEGRATION: "1"
+      AUTODEDUCT_IMAGE: auto-deduct:ci
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
@@ -68,39 +71,22 @@ jobs:
         with:
           python-version: "3.12"
       - name: Run ASE 2024 smoke regression
-        env:
-          AUTODEDUCT_RUN_INTEGRATION: "1"
-          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_ase_2024_integration.py" -v
       - name: Run supported microtests
-        env:
-          AUTODEDUCT_RUN_INTEGRATION: "1"
-          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_public_microtests_integration.py" -v
       - name: Run verified-warning microtests
-        env:
-          AUTODEDUCT_RUN_INTEGRATION: "1"
-          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_expected_warning_integration.py" -v
       - name: Run expected-limitation microtests
-        env:
-          AUTODEDUCT_RUN_INTEGRATION: "1"
-          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_expected_limitation_integration.py" -v
       - name: Run expected-incomplete-WP microtests
-        env:
-          AUTODEDUCT_RUN_INTEGRATION: "1"
-          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_expected_incomplete_wp_integration.py" -v
       - name: Run host LOGOS integration against the standard image
         env:
           AUTODEDUCT_RUN_LOGOS_DOCKER: "1"
-          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_logos_integration.py" -v
       - name: Run host AcTa and CBMC integration
         env:
           AUTODEDUCT_RUN_ACTA_DOCKER: "1"
-          AUTODEDUCT_IMAGE: auto-deduct:ci
         run: python -m unittest discover -s tests -p "test_acta_integration.py" -v
       - name: Run local AcTa workflow inside the verifier image
         run: >-
