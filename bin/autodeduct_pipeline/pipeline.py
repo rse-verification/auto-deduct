@@ -277,7 +277,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     cli = parser()
     if arguments and arguments[0] in {"llm", "deductive", "acta"}:
-        mode = {"llm": "llm", "deductive": "deductive", "acta": "acta"}[arguments.pop(0)]
+        mode = arguments.pop(0)
         options = arguments[:arguments.index("--")] if "--" in arguments else arguments
         if any(word == "--mode" or word.startswith("--mode=") for word in options):
             cli.error("choose a mode command or --mode, not both")

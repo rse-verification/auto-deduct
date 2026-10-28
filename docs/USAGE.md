@@ -25,7 +25,7 @@ Mode-specific guides:
   CBMC options, loop bounds and evidence.
 
 The default is deductive. `--mode deductive`, `--mode llm`, and `--mode acta`
-flags are alternatives to the mode commands; choose one form. Reports retain
+flags are alternatives to the mode commands; choose one form. Reports use
 `mode: "deductive"` for deductive mode, `mode: "llm"` for LLM mode, and
 `mode: "acta"` for AcTa mode.
 There is no automatic fallback between modes. Use `./llm` or `./deductive` for
