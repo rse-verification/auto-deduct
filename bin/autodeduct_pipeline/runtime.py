@@ -19,6 +19,8 @@ def validate_mount_path(path):
 
 
 def docker_run_options(platform, name):
+    if os.name != "posix":
+        raise PipelineError("input", "Docker verification requires a POSIX host; use WSL on Windows")
     return ["docker", "run", "--rm", "--pull", "never", "--name", name, "--platform", platform,
             "--network", "none", "--read-only", "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--tmpfs", "/tmp:rw,nosuid,size=256m",
