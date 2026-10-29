@@ -1,4 +1,4 @@
-"""Run the AutoDeduct deductive, LLM and AcTa/CBMC workflows.
+"""Run the AutoDeduct deductive, LLM and AcTa workflows.
 
 The runner deliberately keeps generated files in a separate output directory.
 The input C files are read-only from the runner's point of view.
