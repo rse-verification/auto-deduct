@@ -8,7 +8,7 @@ from pathlib import Path
 from .stages import PipelineError, run_stage
 
 
-def in_container():
+def in_container() -> bool:
     return (os.environ.get("AUTODEDUCT_CONTAINER") == "1"
             or Path("/.dockerenv").exists() or Path("/run/.containerenv").exists())
 
