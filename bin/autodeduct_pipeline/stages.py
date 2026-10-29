@@ -44,6 +44,8 @@ GENERATED_OUTPUT_NAMES = frozenset({
     "cbmc.json",
     "acta_image.stdout.log",
     "acta_image.stderr.log",
+    "acta_environment.stdout.log",
+    "acta_environment.stderr.log",
     "acta_generate.stdout.log",
     "acta_generate.stderr.log",
     "cbmc.stdout.log",

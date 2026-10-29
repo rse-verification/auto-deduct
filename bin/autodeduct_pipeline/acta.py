@@ -105,14 +105,35 @@ def import_acta_report(path, args):
 def run_acta_workflow(args, source, output_dir, report):
     docker = args.acta_runtime == "docker"
     frontend = args.acta_frama_c or "frama-c"
-    if not docker and shutil.which(frontend) is None:
-        report.errors.append({"stage": "environment", "message": f"required AcTa executable not found: {frontend}"})
-        return report
+    if not docker:
+        for executable in (frontend, args.cbmc):
+            if shutil.which(executable) is None:
+                report.errors.append({"stage": "environment", "message": f"required AcTa executable not found: {executable}"})
+                return report
     image_id = None
     if docker:
         image_id = resolve_image(args.acta_docker_image, name="acta_image", report=report,
                                  output_dir=output_dir, timeout=args.timeout)
         if image_id is None:
+            return report
+        check = """import shutil, sys
+missing = [tool for tool in sys.argv[1:] if shutil.which(tool) is None]
+if missing:
+    sys.exit("required AcTa executable(s) not found: " + ", ".join(missing))
+"""
+        command, container_name = acta_command(
+            args, source, output_dir, image_id,
+            ["python3", "-c", check, frontend, args.cbmc],
+        )
+        environment = run_container_stage(
+            name="acta_environment", description="Check AcTa and CBMC executables in the verifier image",
+            command=command, container_name=container_name, report=report,
+            cwd=output_dir, output_dir=output_dir, timeout=args.timeout,
+        )
+        report.stages.append(environment)
+        if environment.status != "passed":
+            report.errors.append({"stage": environment.name,
+                                  "message": environment.error or "AcTa dependencies are unavailable in the verifier image"})
             return report
     result_file = output_dir / REPORT_OUTPUT
     includes = sorted({source.parent, *(Path(value).expanduser().resolve() for value in args.include)}, key=str)

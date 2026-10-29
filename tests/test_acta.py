@@ -46,6 +46,9 @@ class ActaTests(unittest.TestCase):
                     self.assertEqual(command[command.index("--network") + 1], "none")
                     self.assertIn(f"type=bind,source={source.parent},target={source.parent},readonly", command)
                     self.assertIn(f"type=bind,source={output},target={output}", command)
+                    if "python3" in command:
+                        self.assertEqual(command[-2:], ["frama-c", "cbmc"])
+                        return subprocess.CompletedProcess(command, 0, "", "")
                 self.assertIn("-acta-run-cbmc", command)
                 self.assertEqual(command[command.index("-acta-report") + 1], str(output / "acta-report.json"))
                 self.assertEqual(command[command.index("-acta-cbmc-unwind") + 1], "7")
@@ -105,10 +108,10 @@ class ActaTests(unittest.TestCase):
                 report, commands = self.exercise(runtime=runtime)
                 self.assertEqual(report.status, "passed", report.errors)
                 self.assertEqual([stage.name for stage in report.stages],
-                                 (["acta_image"] if runtime == "docker" else []) + ["acta_verify"])
+                                 (["acta_image", "acta_environment"] if runtime == "docker" else []) + ["acta_verify"])
                 self.assertEqual(report.cbmc_report.proved, 1)
                 self.assertEqual(report.cbmc_report.unwind, 7)
-                self.assertEqual(len(commands), 2 if runtime == "docker" else 1)
+                self.assertEqual(len(commands), 3 if runtime == "docker" else 1)
 
     def test_missing_malformed_or_failed_reports_are_not_success(self):
         for failure in ("generate", "no_report", "timeout", "false_success", "unwinding", "unsafe",
