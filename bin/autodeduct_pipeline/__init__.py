@@ -1,4 +1,4 @@
-"""Run the AutoDeduct V1 Saida/TriCera/ISP/Eva/WP pipeline.
+"""Run the AutoDeduct deductive and LLM workflows.
 
 The runner deliberately keeps generated files in a separate output directory.
 The input C files are read-only from the runner's point of view.

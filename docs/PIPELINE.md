@@ -1,9 +1,13 @@
 # Pipeline and Diagnostics
 
+[Documentation index](README.md) · [Common usage](USAGE.md) · [LLM usage](LLM.md)
+
 AutoDeduct coordinates existing analysis components. It does not implement a
 C parser, call graph, abstract interpreter, or theorem prover itself.
 
 ## Stage Flow
+
+The following stages apply to the default deductive mode.
 
 | Stage | Component | Responsibility | Main artifact |
 | --- | --- | --- | --- |
@@ -18,21 +22,34 @@ annotated C output and uses Eva states to produce additional ACSL clauses. ISP
 also owns reachable-function and missing-contract semantics; AutoDeduct reads
 its JSON report rather than reimplementing the call graph.
 
+With `--mode llm --llm-runtime docker`, `logos_image` resolves the installed
+verifier image to an immutable ID, then `logos_skill` extracts its SKILL.md for
+the host agent. These two stages are unnecessary in local mode, which uses the
+configured host skill. `logos_environment` checks wrapper dependencies for the
+selected runtime. `llm_workflow` then invokes Codex with the selected SKILL.md
+and a generation-only task on the host. `logos_verify` explicitly invokes the
+LOGOS Python wrapper locally or inside Docker for annotation and verification.
+`skill_verify` validates the returned WP evidence without rerunning WP.
+AutoDeduct checks source hashes, annotation-only changes, the requested
+verification options, and complete nonzero proof goals. Saida/TriCera,
+ISP/Eva, and ISP coverage checking are not run. See [LLM mode](USAGE.md#llm-mode).
+
 ## Status Model
 
-The top-level pipeline status is `PASSED` or `FAILED`. Each recorded stage has
+The JSON top-level status is `passed` or `failed`; the console prints uppercase
+labels. Each recorded JSON stage has
 one of these statuses:
 
-- `PASSED`: the mandatory stage completed and its expected output is valid.
-- `WARNING`: the stage reported a recognized non-fatal limitation; the
+- `passed`: the mandatory stage completed and its expected output is valid.
+- `warning`: the stage reported a recognized non-fatal limitation; the
   diagnostic is retained and later stages continue.
-- `FAILED`: the command returned a nonzero status, produced an unusable
+- `failed`: the command returned a nonzero status, produced an unusable
   artifact, or did not meet an acceptance condition.
-- `ERROR`: the command could not be started.
-- `TIMEOUT`: the command exceeded its configured stage timeout.
+- `error`: the command could not be started.
+- `timeout`: the command exceeded its configured stage timeout.
 
 Stages not reached after an earlier failure are omitted from the `stages`
-array rather than emitted as `SKIPPED` records.
+array rather than emitted as `skipped` records.
 
 A warning is not silently accepted. It remains visible in the console and
 `report.json`, while later contract checks and WP determine whether the
@@ -40,13 +57,19 @@ program can still be completely verified.
 
 ## Acceptance Criteria
 
-AutoDeduct returns exit code `0` only when:
+In deductive mode, AutoDeduct returns exit code `0` only when:
 
 1. the input and environment are valid;
 2. parsing succeeds;
 3. Saida/TriCera and ISP produce their expected generated files;
 4. ISP reports no reachable helper function with a missing contract; and
 5. WP reports proof goals and proves all of them.
+
+In LLM mode, the host skill must return source-matched contract JSON, and the
+LOGOS wrapper must finish with annotation-only output and a verifier report
+with all requested
+options and complete nonzero WP goals. The result does not include the
+deductive mode's reachable-helper coverage guarantee.
 
 A command exiting successfully is not enough by itself. AutoDeduct validates
 the generated artifacts, machine-readable contract report, and WP goal count.
@@ -100,8 +123,10 @@ useful generated files are:
 - `missing-helper-contracts.json` for ISP reachability and contract coverage;
 - `report.json` for commands, statuses, diagnostics, log paths, and artifacts.
 
-Every report contains `schema_version`. AutoDeduct 1.0 writes schema version
+Every report contains `schema_version`. This branch writes schema version
 `1`; the separate `version` field identifies the AutoDeduct CLI release.
+Reports include `mode` in schema version `1`; consumers of earlier reports
+may treat its absence as `deductive`.
 
 Use `autodeduct --json ...` when another program or CI job needs the same
 result as machine-readable standard output.

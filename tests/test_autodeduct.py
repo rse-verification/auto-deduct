@@ -18,6 +18,29 @@ STAGES = import_module("autodeduct_pipeline.stages")
 
 
 class AutoDeductPipelineTests(unittest.TestCase):
+    def test_mode_commands_and_flags_dispatch(self):
+        for words, expected in (
+            (["llm", "input.c"], "llm"),
+            (["deductive", "input.c"], "deductive"),
+            (["--mode", "llm", "input.c"], "llm"),
+            (["input.c"], "deductive"),
+            (["./llm"], "deductive"),
+        ):
+            with self.subTest(arguments=words), patch(
+                "autodeduct_pipeline.pipeline.run_pipeline",
+                side_effect=MODULE.PipelineError("input", "test dispatch"),
+            ) as run, patch("autodeduct_pipeline.pipeline.print_human_report"):
+                self.assertEqual(MODULE.main(words), 1)
+                self.assertEqual(run.call_args.args[0].mode, expected)
+                self.assertEqual(run.call_args.args[0].sources, [words[-1]])
+        for words in (
+            ["llm", "--mode", "deductive", "input.c"],
+            ["deductive", "--mode=llm", "input.c"],
+        ):
+            with self.subTest(arguments=words), self.assertRaises(SystemExit) as error:
+                MODULE.main(words)
+            self.assertEqual(error.exception.code, 2)
+
     def test_report_serialization_has_a_versioned_top_level_contract(self):
         report = MODULE.PipelineReport(
             version="1.0.0",
@@ -37,6 +60,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 "contract_report": None,
                 "errors": [],
                 "schema_version": 1,
+                "mode": "deductive",
             },
         )
 
@@ -47,7 +71,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
         defaults = {
             "FRAMA_C_VER": "33.0",
             "OCAML_VER": "5.4.0",
-            "SAIDA_VER": "v0.6.0",
+            "SAIDA_VER": "605a4a4ae976050ec5e1060fec621ef4d6157f68",
             "TRICERA_VER": "v0.5",
             "ISP_VER": "v0.4.0",
         }
@@ -62,6 +86,21 @@ class AutoDeductPipelineTests(unittest.TestCase):
             'opam switch create default "ocaml-base-compiler.${OCAML_VER}"',
             dockerfile,
         )
+
+    def test_standard_docker_image_includes_logos(self):
+        dockerfile = (ROOT / "Dockerfiles/AutoDeductDockerfile").read_text()
+        self.assertIn("FROM auto-deduct-runtime AS auto-deduct-logos", dockerfile)
+        self.assertIn('ARG LOGOS_REPO="https://github.com/rse-verification/logos.git"', dockerfile)
+        self.assertRegex(dockerfile, r'ARG LOGOS_VER="[0-9a-f]{40}"')
+        self.assertIn("libclang-dev", dockerfile)
+        self.assertIn("cp -a /tmp/logos/skill /opt/logos/skill", dockerfile)
+        self.assertIn("git -C /tmp/logos rev-parse HEAD > /opt/logos/REVISION", dockerfile)
+        self.assertIn("rm -rf /tmp/logos", dockerfile)
+        self.assertIn("--check-dependencies", dockerfile)
+        self.assertIn("ENV HOME=/home/dev", dockerfile)
+        self.assertFalse((ROOT / "Dockerfiles/LogosDockerfile").exists())
+        args = MODULE.parser().parse_args(["--mode", "llm", "--llm-runtime", "docker", "input.c"])
+        self.assertEqual(args.llm_docker_image, "auto-deduct:latest")
 
     def test_timeout_must_be_finite_and_positive(self):
         for value in ("0", "-1", "nan", "inf"):
@@ -79,7 +118,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
             MODULE.validate_forwarded_options(args)
 
         self.assertEqual(raised.exception.stage, "input")
-        self.assertIn("pipeline-owned option -main", raised.exception.message)
+        self.assertIn("pipeline-owned option -main", str(raised.exception))
 
     def test_pipeline_owned_wp_option_is_rejected(self):
         args = MODULE.parser().parse_args(
@@ -90,7 +129,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
             MODULE.validate_forwarded_options(args)
 
         self.assertEqual(raised.exception.stage, "input")
-        self.assertIn("pipeline-owned option -no-wp", raised.exception.message)
+        self.assertIn("pipeline-owned option -no-wp", str(raised.exception))
 
     def test_supported_forwarded_options_are_accepted(self):
         args = MODULE.parser().parse_args(
@@ -194,8 +233,8 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.run_pipeline(args)
 
             self.assertEqual(raised.exception.stage, "input")
-            self.assertIn("exactly one C translation unit", raised.exception.message)
-            self.assertIn("Saida", raised.exception.message)
+            self.assertIn("exactly one C translation unit", str(raised.exception))
+            self.assertIn("provide one .c file", str(raised.exception))
 
     def test_directory_inputs_accept_uppercase_c_extension(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -226,7 +265,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.source_paths([str(source)])
 
             self.assertEqual(raised.exception.stage, "input")
-            self.assertIn("unsupported source file type", raised.exception.message)
+            self.assertIn("unsupported source file type", str(raised.exception))
 
     def test_cli_does_not_write_report_on_input_error(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -289,7 +328,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.validate_output_directory([source], output, [project])
 
             self.assertEqual(raised.exception.stage, "output")
-            self.assertIn("overlaps the input source tree", raised.exception.message)
+            self.assertIn("overlaps the input source tree", str(raised.exception))
 
     def test_output_directory_cannot_be_an_ancestor_of_input_tree(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -303,7 +342,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.validate_output_directory([source], output, [project])
 
             self.assertEqual(raised.exception.stage, "output")
-            self.assertIn("overlaps", raised.exception.message)
+            self.assertIn("overlaps", str(raised.exception))
 
     def test_output_symlink_resolving_inside_input_tree_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -397,7 +436,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 )
 
             self.assertEqual(raised.exception.stage, "output")
-            self.assertIn("not a directory", raised.exception.message)
+            self.assertIn("not a directory", str(raised.exception))
             self.assertEqual(output.read_text(encoding="utf-8"), "keep\n")
 
     def test_prepare_output_directory_removes_only_known_artifacts(self):
@@ -439,7 +478,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                     MODULE.prepare_output_directory(output)
 
             self.assertEqual(raised.exception.stage, "output")
-            self.assertIn("could not prepare output directory", raised.exception.message)
+            self.assertIn("could not prepare output directory", str(raised.exception))
 
     def test_directory_without_c_files_is_an_input_error(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -447,7 +486,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.source_paths([temp])
 
             self.assertEqual(raised.exception.stage, "input")
-            self.assertIn("no C source files", raised.exception.message)
+            self.assertIn("no C source files", str(raised.exception))
 
     def test_unreadable_source_directory_is_an_input_error(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -463,7 +502,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                     MODULE.source_paths([temp])
 
             self.assertEqual(raised.exception.stage, "input")
-            self.assertIn("could not read source directory", raised.exception.message)
+            self.assertIn("could not read source directory", str(raised.exception))
 
     def test_source_directories_are_forwarded_for_generated_sources(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -484,7 +523,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.missing_contract_names(report)
 
             self.assertEqual(raised.exception.stage, "contract_check")
-            self.assertIn("did not produce", raised.exception.message)
+            self.assertIn("did not produce", str(raised.exception))
 
     def test_malformed_isp_missing_helper_entry_is_an_explicit_error(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -498,7 +537,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 MODULE.missing_contract_names(report)
 
             self.assertEqual(raised.exception.stage, "contract_check")
-            self.assertIn("malformed missing-helper entry", raised.exception.message)
+            self.assertIn("malformed missing-helper entry", str(raised.exception))
 
     def test_cli_runs_all_stages_and_keeps_missing_report(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -732,6 +771,94 @@ class AutoDeductPipelineTests(unittest.TestCase):
 
             self.assertEqual(result.status, "failed")
             self.assertIn("missing header", result.error)
+
+    @unittest.skipUnless(MODULE.os.name == "posix", "requires ordinary symlink creation")
+    def test_stage_logs_do_not_follow_generator_created_symlinks(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            output = root / "output"
+            output.mkdir()
+            original = root / "outside.txt"
+            original.write_text("keep user data")
+            script = (
+                "from pathlib import Path\n"
+                f"Path('llm_workflow.stdout.log').symlink_to({str(original)!r})\n"
+                "print('generated log')\n"
+            )
+            result = MODULE.run_stage(
+                name="llm_workflow", description="offline generator",
+                command=[sys.executable, "-c", script], cwd=output,
+                output_dir=output, timeout=10,
+            )
+            self.assertEqual(result.status, "passed")
+            self.assertEqual(original.read_text(), "keep user data")
+            self.assertFalse((output / "llm_workflow.stdout.log").is_symlink())
+            self.assertEqual((output / "llm_workflow.stdout.log").read_text(), "generated log\n")
+
+    @unittest.skipUnless(MODULE.os.name == "posix", "requires ordinary symlink creation")
+    def test_stage_rejects_replaced_output_directory(self):
+        for replace_with_symlink in (True, False):
+            with self.subTest(symlink=replace_with_symlink), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                output = root / "output"
+                output.mkdir()
+                victim = root / "victim"
+                victim.mkdir()
+                log = victim / "llm_workflow.stdout.log"
+                log.write_text("keep user data")
+                replacement = (f"Path({str(output)!r}).symlink_to({str(victim)!r}, target_is_directory=True)" if replace_with_symlink
+                               else f"Path({str(victim)!r}).rename({str(output)!r})")
+                script = (
+                    "from pathlib import Path\n"
+                    f"Path({str(output)!r}).rename({str(root / 'saved-output')!r})\n"
+                    f"{replacement}\nprint('generated log')\n"
+                )
+                with self.assertRaisesRegex(OSError, "output directory changed"):
+                    MODULE.run_stage(
+                        name="llm_workflow", description="offline generator",
+                        command=[sys.executable, "-c", script], cwd=output,
+                        output_dir=output, timeout=10,
+                    )
+                retained = log if replace_with_symlink else output / log.name
+                self.assertEqual(retained.read_text(), "keep user data")
+
+    @unittest.skipUnless(MODULE.os.name == "posix", "requires ordinary symlink creation")
+    def test_report_does_not_follow_generator_created_symlink(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            original = root / "outside.txt"
+            original.write_text("keep user data")
+            output = root / "output"
+            output.mkdir()
+            (output / "report.json").symlink_to(original)
+            report = MODULE.PipelineReport(version="test", status="failed", input_files=[], output_directory=str(output))
+            MODULE.persist_report(report)
+            self.assertEqual(original.read_text(), "keep user data")
+            self.assertEqual(json.loads((output / "report.json").read_text())["status"], "failed")
+
+    @unittest.skipUnless(MODULE.os.name == "posix", "requires descriptor-relative file creation")
+    def test_atomic_writer_never_creates_a_temporary_file_in_swapped_parent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            output = root / "output"
+            output.mkdir()
+            victim = root / "victim"
+            victim.mkdir()
+            saved = root / "saved-output"
+            original_open = STAGES.os.open
+
+            def swap_after_directory_open(path, flags, *args, **kwargs):
+                fd = original_open(path, flags, *args, **kwargs)
+                if flags & STAGES.os.O_DIRECTORY:
+                    output.rename(saved)
+                    output.symlink_to(victim, target_is_directory=True)
+                return fd
+
+            with patch.object(STAGES.os, "open", side_effect=swap_after_directory_open):
+                with self.assertRaisesRegex(OSError, "output directory changed"):
+                    STAGES.write_text(output / "report.json", "private generated data")
+            self.assertEqual(list(victim.iterdir()), [])
+            self.assertEqual(list(saved.iterdir()), [])
 
     def test_stage_failure_uses_stdout_when_stderr_is_empty(self):
         with tempfile.TemporaryDirectory() as temp:

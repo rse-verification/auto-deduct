@@ -1,32 +1,41 @@
-# AutoDeduct 1.0 "Rubber Duck" Limitations
+# AutoDeduct limitations
 
-AutoDeduct 1.0 "Rubber Duck" is a deterministic CLI pipeline. It does not modify source
-files or automatically accept generated contracts into the original project.
-Its Saida, TriCera, and ISP components are experimental and retain their own
-language and inference boundaries.
+[Documentation index](README.md) · [Deductive mode](DEDUCTIVE.md) · [LLM mode](LLM.md)
 
-## Supported Input Shape
+The Saida/TriCera/ISP inference limitations below apply to **deductive mode**.
+LLM mode uses LOGOS and WP instead; its C/ACSL feature coverage and
+contract-generation reliability are **under investigation**. A feature that
+fails deductive inference is not automatically supported by LLM mode.
 
-AutoDeduct 1.0 accepts one C translation unit plus its headers. Multiple `.c` inputs are
-rejected before analysis because Saida's current source merge is not
-file-aware.
+Both workflows require review of the supplied specifications and assumptions.
+AutoDeduct writes generated artifacts separately from the original source.
+
+## Shared input requirements
+
+Both modes currently accept one C translation unit plus its headers. The
+launcher rejects multiple `.c` inputs before either workflow starts. Generated
+output must be separate from the selected source and input files.
+
+## Deductive inference boundaries
+
+The deductive workflow uses experimental Saida, TriCera and ISP components,
+each with its own language and inference boundaries. Saida's current source
+merge is not file-aware.
 
 Saida supports a C-expression subset of `requires`, `ensures`, and supported
 behavior guards. General ACSL logic functions and predicates are outside this
 inference subset. Behavior-specific `assigns`, `complete`, and `disjoint`
 clauses are not treated as fully inferred and verified functional contracts.
 
-## Known Boundaries
-
-| Boundary | AutoDeduct 1.0 behavior | Recommended workaround |
+| Boundary | The deductive workflow behavior | Recommended workaround |
 | --- | --- | --- |
 | Floating point | Functional inference fails when TriCera reports an unsupported floating-point type. An integer fallback is not accepted as equivalent semantics. | Use a reviewed fixed-point model or a toolchain that models the required IEEE behavior. |
 | Pointer arithmetic and unsupported lvalues | ISP reports `ISP-E005`; WP is not run on incomplete auxiliary inference. | Simplify the access pattern or provide reviewed validity, separation, frame, and value-relation ACSL. |
-| Nested pointers | May fail during functional inference, ISP, contract checking, or WP. AutoDeduct 1.0 does not infer a complete multi-level validity and aliasing model. | Flatten the interface where appropriate or write explicit contracts for every dereference level. |
+| Nested pointers | May fail during functional inference, ISP, contract checking, or WP. The deductive workflow does not infer a complete multi-level validity and aliasing model. | Flatten the interface where appropriate or write explicit contracts for every dereference level. |
 | Persistent local static state | WP may remain incomplete, but no component diagnostic identifies every occurrence. | Model persistent state explicitly and provide an accurate frame and state-transition contract. |
-| Loops | General loop-invariant inference is outside AutoDeduct 1.0. Missing or insufficient annotations leave WP goals unresolved. | Add reviewed `loop invariant`, `loop assigns`, and, where required, `loop variant` clauses. |
+| Loops | General loop-invariant inference is outside the deductive workflow. Missing or insufficient annotations leave WP goals unresolved. | Add reviewed `loop invariant`, `loop assigns`, and, where required, `loop variant` clauses. |
 
-## ISP Aggregate and Index Boundaries
+### ISP aggregate and index boundaries
 
 ISP supports flat struct fields after an enum-indexed array access. It does
 not recursively generate annotations for arbitrary repeated `Field -> Index`
@@ -40,7 +49,7 @@ paths such as `records[slot].f1[i].f2[j]`.
 These diagnostics fail closed: AutoDeduct does not run WP as though the
 missing auxiliary annotations were complete.
 
-## Contracts and Frames
+### Contracts and frames
 
 Saida preserves function-level `assigns` clauses, but its inference harness
 does not by itself prove every frame condition. `SAIDA-W001` identifies this
@@ -51,7 +60,7 @@ Missing contracts on functions ISP considers reachable fail the
 `contract_check` stage. A contract that exists but is too weak may instead
 appear as unresolved WP goals.
 
-## Interpreting Success
+## Interpreting success in both modes
 
 A successful command is evidence for the selected input, entry point, tool
 versions, and generated proof obligations. It is not evidence that all C or
@@ -65,3 +74,26 @@ alongside the contract obligations.
 When qualifying a new program, retain `report.json` and the named stage logs.
 The public regression sources under `tests/cases/` document the expected
 outcomes exercised by the repository's integration suite.
+
+## LLM mode: coverage under investigation
+
+LLM mode is experimental. The deductive feature table above is not a support
+matrix for LLM mode: coverage of floating point, pointer arithmetic, nested
+pointers and aggregates, persistent static state, loops and richer ACSL has
+not been systematically qualified. Contract quality and repeatability also
+remain under investigation. Check the generated contracts and actual WP
+results for each input; a successful example does not establish general
+support for its language features.
+
+The following are known restrictions of the current implementation:
+
+- The current generation adapter requires authenticated host Codex; model APIs
+  and arbitrary agent CLIs are not interchangeable yet.
+- LOGOS requires existing ACSL, one C translation unit, and contracts for
+  undocumented functions. Its parser requires libclang.
+- Include/macro options configure Frama-C verification, not the annotation parser.
+  Project-specific parsing configurations may fail.
+- Codex inside Docker is unsupported. Docker verification is selected explicitly;
+  without Docker the complete local verification dependencies are required.
+
+See [LLM usage](LLM.md) for runtime dependencies, reports and troubleshooting.

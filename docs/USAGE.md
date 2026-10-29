@@ -1,142 +1,96 @@
-# Usage
+# Common usage
 
-AutoDeduct accepts one C source file or a project directory that resolves to
-exactly one C translation unit. It writes all generated artifacts to a
-separate output directory and does not edit the source project.
+[Documentation index](README.md) · [Deductive mode](DEDUCTIVE.md) · [LLM mode](LLM.md)
 
-## CLI
+## Select a mode
 
 ```text
 autodeduct --help
 autodeduct --version
-autodeduct [options] SOURCE_OR_DIRECTORY [SOURCE_OR_DIRECTORY ...]
+autodeduct deductive [options] SOURCE_OR_DIRECTORY
+autodeduct llm [options] SOURCE_OR_DIRECTORY
 ```
 
-Common options:
+These commands assume `bin/` is on the host `PATH`; use `./bin/autodeduct` from
+the checkout otherwise. The traditional Docker command is shown in
+[deductive usage](DEDUCTIVE.md#run-in-docker).
 
-- `--entry-point NAME`: contracted entry function; default is `main`.
-- `--output-dir DIRECTORY`: generated files and logs; default is
-  `autodeduct-output`.
-- `--include DIRECTORY`: add a header directory; repeat as needed.
-- `--frama-c-option OPTION`: forward an option to Frama-C stages.
-- `--wp-option OPTION`: forward an option only to WP.
-- `--wp-rte`: add WP runtime-error goals; these are not included by default.
-- `--timeout SECONDS`: timeout for each external stage; default is 300.
-- `--json`: print the final machine-readable report to standard output.
+Mode-specific guides:
 
-Pipeline-owned options cannot be overridden through forwarded Frama-C or WP
-arguments.
+- [Deductive mode](DEDUCTIVE.md): Docker, local execution, outputs and manual stages.
+- [LLM mode](LLM.md): host setup, local versus Docker verification, Codex profiles,
+  contract JSON handoff and reports.
+
+The default is deductive. `--mode deductive` and `--mode llm`
+flags are alternatives to the mode commands; choose one form. Reports use
+`mode: "deductive"` for deductive mode and `mode: "llm"` for LLM mode.
+There is no automatic fallback between modes. Use `./llm` or `./deductive` for
+input directories with those names.
+
+## Common options
+
+| Option | Purpose |
+| --- | --- |
+| `--entry-point NAME` | Contracted entry function; default `main` |
+| `--output-dir DIRECTORY` | Generated files and logs; default `autodeduct-output` |
+| `--include DIRECTORY` | Header directory; repeat as needed |
+| `--frama-c-option OPTION` | Extra Frama-C argument; repeat as needed |
+| `--wp-option OPTION` | Extra WP argument; repeat as needed |
+| `--wp-rte` | Add runtime-error goals; all added goals must be proved |
+| `--timeout SECONDS` | Positive timeout for each external stage; default 300 seconds |
+| `--json` | Print the final machine-readable report |
+
+Pass options starting with `-` using `=`:
+
+```shell
+autodeduct deductive --include include \
+  --frama-c-option=-cpp-extra-args=-DPLATFORM_TEST path/to/program.c
+```
+
+Pipeline-owned arguments such as `-main`, `-wp`, `-saida` and `-isp` cannot be
+changed through forwarded options. Use AutoDeduct's dedicated options.
+
+## Input and output rules
+
+AutoDeduct accepts one `.c`/`.C` translation unit or a directory containing
+exactly one. Directory searches ignore common version-control, build,
+dependency and generated-output folders. Multiple C inputs are rejected;
+provide one analysis translation unit and its headers with `--include`.
+Headers are not source inputs.
+
+Use a separate output directory. It must not contain input files or overlap a
+selected source directory. For LLM mode, the skill and runner files must also
+be outside it. Known artifacts from an earlier valid run are cleared so stale
+reports cannot count as a current proof.
+
+## Results and exit status
+
+Exit `0` means every mandatory stage and all nonzero WP goals passed. Exit `1`
+means input, environment, generation or verification failed. Argument parsing
+errors use exit `2`. Retain `report.json` and stage logs for diagnosis.
+
+See [pipeline and diagnostics](PIPELINE.md) for stage status, evidence validation
+and proof assumptions, and [limitations](LIMITATIONS.md) for unsupported inputs.
+
+## LLM mode
+
+See the dedicated [LLM setup and usage guide](LLM.md).
+
+| Option | Purpose |
+| --- | --- |
+| `--llm-runtime local\|docker` | Where the LOGOS wrapper verifies; default `local`, with Codex on the host in both cases |
+| `--llm-docker-image IMAGE` | Existing local verifier image name:tag or ID; default `auto-deduct:latest`; no automatic build or pull |
+| `--llm-docker-platform PLATFORM` | Verifier architecture; default `linux/amd64` |
+
+If you build with a custom image name, pass that name to the launcher. See
+the [matching build and run commands](LLM.md#choose-a-custom-image-name).
 
 ## Docker
 
-Mount the project or repository containing it as `/work`:
-
-```shell
-docker run --rm \
-  -v "$PWD":/work \
-  -w /work \
-  auto-deduct:latest \
-  autodeduct \
-  --entry-point main \
-  --output-dir /work/autodeduct-output \
-  /work/examples/ase-2024
-```
-
-Add `--platform linux/amd64` after `docker run` on Apple Silicon.
-
-For headers outside the source directory:
-
-```shell
-docker run --rm \
-  -v "$PWD":/work \
-  -w /work \
-  auto-deduct:latest \
-  autodeduct \
-  --include /work/my-project/include \
-  --entry-point main \
-  --output-dir /work/autodeduct-output \
-  /work/my-project
-```
+See [deductive Docker usage](DEDUCTIVE.md#run-in-docker) or
+[LLM Docker verification](LLM.md#run-with-docker-verification).
 
 ## Without Docker
 
-After completing the native setup in [Installation](INSTALLATION.md):
-
-```shell
-export PATH="$PWD/bin:$PATH"
-autodeduct \
-  --entry-point main \
-  --output-dir autodeduct-output \
-  examples/ase-2024
-```
-
-The checkout-local command also works without changing `PATH`:
-
-```shell
-./bin/autodeduct --entry-point main examples/ase-2024
-```
-
-## Input Rules
-
-Directory inputs are searched recursively for `.c` and `.C` files. Common
-build, version-control, dependency, and generated-output directories are
-ignored. Header files are not source inputs; provide their locations with
-`--include`.
-
-AutoDeduct 1.0 Saida inference accepts one translation unit. A directory containing
-multiple C translation units is rejected instead of silently processing only
-one. Such a project must first be represented as one analysis translation
-unit.
-
-Preprocessor macros can be forwarded explicitly:
-
-```shell
-autodeduct \
-  --frama-c-option=-cpp-extra-args=-DPLATFORM_TEST \
-  --include include \
-  src/main.c
-```
-
-## Generated Output
-
-The output directory contains:
-
-- `inferred.c`: functional contracts emitted through Saida/TriCera.
-- `out.c`: ISP auxiliary annotations applied to the inferred source.
-- `missing-helper-contracts.json`: ISP reachable-contract report.
-- `contracts.json`: normalized AutoDeduct contract summary.
-- `report.json`: final pipeline and stage status.
-- stage-specific stdout and stderr logs.
-
-Old known artifacts are invalidated at the start of a valid run so a previous
-successful report cannot be mistaken for the current result. The output
-directory may not overlap the source tree.
-
-## Run Stages Manually
-
-This native workflow is useful for inspecting intermediate output:
-
-```shell
-PROJECT="$PWD/examples/ase-2024"
-OUT="$PWD/autodeduct-output-manual"
-mkdir -p "$OUT"
-cd "$OUT"
-CPP_INCLUDE="-cpp-extra-args=-I$PROJECT"
-
-frama-c -main main "$CPP_INCLUDE" "$PROJECT/stee.c"
-
-frama-c -main main "$CPP_INCLUDE" \
-  -saida -saida-tricera-path tri \
-  "-saida-out=$OUT/inferred.c" "$PROJECT/stee.c"
-
-frama-c -main main "$CPP_INCLUDE" \
-  -isp-entry-point main -isp \
-  -isp-missing-helper-contracts \
-  -isp-missing-helper-contracts-json "$OUT/missing-helper-contracts.json" \
-  "$OUT/inferred.c" -isp-print-file "$OUT/out.c"
-
-frama-c -main main "$CPP_INCLUDE" -wp "$OUT/out.c"
-```
-
-See [Pipeline and diagnostics](PIPELINE.md) for how each result contributes to
-the final status.
+See [deductive local usage](DEDUCTIVE.md#run-locally) or
+[LLM local verification](LLM.md#local-verification-dependencies).

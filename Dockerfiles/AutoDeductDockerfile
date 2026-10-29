@@ -35,7 +35,8 @@ ARG PROXY_PORT=""
 ARG FRAMA_C_VER="33.0"
 ARG OCAML_VER="5.4.0"
 ARG SAIDA_REPO="https://github.com/rse-verification/saida.git"
-ARG SAIDA_VER="v0.6.0"
+# Saida v0.6.0; pin the commit so rebuilding does not follow a moved tag.
+ARG SAIDA_VER="605a4a4ae976050ec5e1060fec621ef4d6157f68"
 ARG ISP_REPO="https://github.com/rse-verification/interface-specification-propagator.git"
 # ISP v0.4.0 contains the Frama-C 33 compatibility and CDL-2651 fixes.
 ARG ISP_VER="v0.4.0"
@@ -221,7 +222,7 @@ RUN ln -s /home/dev/repos/tricera/tri && \
 ##
 # Stage 5 - Add AutoDeduct Frama-C plugins and CLI
 #
-# The AutoDeduct 1.0 image packages the command-line pipeline.
+# The CLI selects the deductive or LLM workflow at runtime.
 #
 FROM auto-deduct-tricera AS auto-deduct-runtime
 
@@ -268,3 +269,42 @@ ENV PATH="/home/dev/.local/bin:/home/dev/.opam/default/bin:${PATH}"
 WORKDIR /home/dev
 
 CMD ["/usr/bin/bash", "-l"]
+
+##
+# Stage 6 - Add LOGOS to the standard toolchain
+#
+FROM auto-deduct-runtime AS auto-deduct-logos
+
+ARG LOGOS_REPO="https://github.com/rse-verification/logos.git"
+ARG LOGOS_VER="cea177911b6ad5176122b4b3c415f92897c464d2"
+LABEL org.opencontainers.image.logos.source="${LOGOS_REPO}" \
+      org.opencontainers.image.logos.revision="${LOGOS_VER}"
+
+USER root
+RUN apt-get update && \
+  apt-get install --yes --no-install-recommends libclang-dev && \
+  rm -rf /var/lib/apt/lists/* && \
+  chmod o+rx /home/dev
+
+# Retain the skill and resolved revision, without a source checkout or Git history.
+RUN : "${LOGOS_REPO:?LOGOS_REPO must not be empty}" && \
+  : "${LOGOS_VER:?LOGOS_VER must not be empty}" && \
+  GIT_TERMINAL_PROMPT=0 git clone --depth 1 --no-checkout "${LOGOS_REPO}" /tmp/logos && \
+  git -C /tmp/logos fetch --depth 1 origin "${LOGOS_VER}" && \
+  git -C /tmp/logos checkout --detach FETCH_HEAD && \
+  mkdir -p /opt/logos && \
+  cp -a /tmp/logos/skill /opt/logos/skill && \
+  git -C /tmp/logos rev-parse HEAD > /opt/logos/REVISION && \
+  rm -rf /tmp/logos
+
+ENV AUTODEDUCT_LLM_SKILL=/opt/logos/skill/SKILL.md
+ENV AUTODEDUCT_CONTAINER=1
+# The host UID may have no passwd entry; keep Why3's configured prover location.
+ENV HOME=/home/dev
+
+USER dev
+RUN PYTHONPATH=/opt/logos/skill/scripts python3 -c \
+      'from acsl_tool.parser import extract_functions; assert extract_functions("static inline int helper(void) { return 1; }")[0].name == "helper"' && \
+    python3 /opt/logos/skill/scripts/generate_acsl.py --check-dependencies
+
+WORKDIR /home/dev

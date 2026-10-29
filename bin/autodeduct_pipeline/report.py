@@ -28,6 +28,7 @@ class PipelineReport:
     contract_report: ContractReport | None = None
     errors: list[dict[str, str]] = field(default_factory=list)
     schema_version: int = 1
+    mode: str = "deductive"
 
 
 # Convert the typed pipeline result into JSON-serializable data for automation.

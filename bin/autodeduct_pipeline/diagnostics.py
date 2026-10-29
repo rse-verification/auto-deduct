@@ -129,7 +129,7 @@ def tricera_diagnostic(stage: StageResult) -> str | None:
             type_name = unsupported_type.group("type")
             return (
                 f"TriCera reported that type '{type_name}' is not supported; "
-                "AutoDeduct V1 will not continue with a fallback type "
+                "AutoDeduct deductive mode will not continue with a fallback type "
                 "approximation"
             )
         if re.match(r"^(?:tricera\s*:?\s*)?syntax\s+error\b", payload):
@@ -187,7 +187,7 @@ def saida_partial_diagnostic(stage: StageResult) -> str | None:
     return None
 
 
-# Convert ISP's native unsupported-pointer diagnostic into a stable V1
+# Convert ISP's native unsupported-pointer diagnostic into a stable deductive
 # boundary message. The native code is authoritative; no source regex is used.
 def isp_limit_diagnostic(stage: StageResult) -> str | None:
     text, inspection_error = stage_log_text(stage, "ISP")
@@ -274,7 +274,7 @@ def wp_diagnostic(stage: StageResult) -> str | None:
             return (
                 f"WP proved {proved} of {total} goals; loop proof obligations "
                 "remain unresolved or WP reported missing loop annotations. "
-                "AutoDeduct V1 does not infer loop invariants: add and review "
+                "AutoDeduct deductive mode does not infer loop invariants: add and review "
                 "loop invariant and loop assigns clauses, plus a loop variant "
                 "when termination must be proved"
             )

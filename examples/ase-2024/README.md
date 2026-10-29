@@ -46,6 +46,7 @@ From the AutoDeduct repository root, after building the image:
 
 ```sh
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   -v "$PWD":/work \
   -w /work \
   auto-deduct:latest \

@@ -32,29 +32,6 @@ class PipelineRun:
 class DockerPipelineTestCase(unittest.TestCase):
     """Run one public source through the real image and inspect its report."""
 
-    def make_output_removable(self, output: Path) -> None:
-        """Restore host cleanup permissions after the image writes output."""
-        subprocess.run(
-            [
-                "docker",
-                "run",
-                "--rm",
-                "--user",
-                "0:0",
-                "-v",
-                f"{output}:/output",
-                IMAGE,
-                "/usr/bin/chmod",
-                "-R",
-                "a+rwX",
-                "/output",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-
     def run_autodeduct(
         self,
         source: str,
@@ -71,13 +48,13 @@ class DockerPipelineTestCase(unittest.TestCase):
 
         output = Path(tempfile.mkdtemp(prefix="autodeduct-integration-"))
         try:
-            # The image runs as its dev user, so the mounted root must be
-            # writable even when the host runner has a different numeric UID.
-            output.chmod(0o777)
+            # Artifacts are private (0600); write them as the host reader's UID.
             command = [
                 "docker",
                 "run",
                 "--rm",
+                "--user",
+                f"{os.getuid()}:{os.getgid()}",
                 "-v",
                 f"{ROOT}:/work:ro",
                 "-v",
@@ -111,7 +88,6 @@ class DockerPipelineTestCase(unittest.TestCase):
             report = json.loads(report_file.read_text(encoding="utf-8"))
             return PipelineRun(result.returncode, report, output_text)
         finally:
-            self.make_output_removable(output)
             shutil.rmtree(output)
 
     def assert_complete_verification(self, run: PipelineRun) -> None:
