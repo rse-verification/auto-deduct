@@ -26,7 +26,7 @@ to AcTa; see [build credentials](docs/INSTALLATION.md#github-access-for-image-bu
 Use Bash/Zsh, or Ubuntu inside WSL 2 on Windows. The current standard toolchain targets `linux/amd64`.
 
 ```shell
-git clone --branch acta-integration https://github.com/rse-verification/auto-deduct.git
+git clone https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 
 docker build --secret id=github_token,env=GH_TOKEN --platform linux/amd64 \

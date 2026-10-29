@@ -129,7 +129,7 @@ codex login status
 # If needed: codex login
 docker info
 
-git clone --branch acta-integration \
+git clone \
   https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 export PATH="$PWD/bin:$PATH"
