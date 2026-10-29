@@ -25,20 +25,20 @@ def command_words(value):
     except ValueError as error:
         raise PipelineError("input", f"invalid Codex runner command: {error}") from error
     if not words:
-        raise PipelineError("input", "LLM mode requires a configured Codex runner command")
+        raise PipelineError("input", "Agent mode requires a configured Codex runner command")
     return words
 
 
-def validate_llm_options(args, output_dir):
-    if args.mode != "llm":
+def validate_agent_options(args, output_dir):
+    if args.mode != "agent":
         return
     if in_container():
-        raise PipelineError("input", "LLM mode must be launched on the host; running Codex inside containers is unsupported")
-    if args.llm_runtime == "local" and (not args.llm_skill or not Path(args.llm_skill).expanduser().is_file()):
-        raise PipelineError("input", "set --llm-skill or AUTODEDUCT_LLM_SKILL to an installed SKILL.md")
-    protected = command_words(args.llm_runner)
-    if args.llm_runtime == "local":
-        protected.append(str(Path(args.llm_skill).expanduser().resolve()))
+        raise PipelineError("input", "Agent mode must be launched on the host; running Codex inside containers is unsupported")
+    if args.agent_runtime == "local" and (not args.agent_skill or not Path(args.agent_skill).expanduser().is_file()):
+        raise PipelineError("input", "set --agent-skill or AUTODEDUCT_AGENT_SKILL to an installed SKILL.md")
+    protected = command_words(args.agent_runner)
+    if args.agent_runtime == "local":
+        protected.append(str(Path(args.agent_skill).expanduser().resolve()))
     for word in protected:
         # Bare command names and CLI arguments are not files in the current directory.
         if not Path(word).expanduser().is_file():
@@ -48,8 +48,8 @@ def validate_llm_options(args, output_dir):
             raise PipelineError("input", "skill and runner files must be outside the output directory")
         if Path(word).is_file() and not Path(word).is_absolute():
             raise PipelineError("input", "use absolute paths for runner scripts and files")
-    if args.llm_runtime == "local":
-        wrapper = Path(args.llm_skill).expanduser().resolve().parent / "scripts/generate_acsl.py"
+    if args.agent_runtime == "local":
+        wrapper = Path(args.agent_skill).expanduser().resolve().parent / "scripts/generate_acsl.py"
         if not wrapper.is_file():
             raise PipelineError("input", f"LOGOS wrapper not found: {wrapper}")
         runtime = wrapper.resolve().parent
@@ -57,11 +57,11 @@ def validate_llm_options(args, output_dir):
             raise PipelineError("input", "LOGOS runtime files must be outside the output directory")
     else:
         if os.name != "posix":
-            raise PipelineError("input", "Docker LLM mode requires POSIX host paths; use WSL on Windows")
+            raise PipelineError("input", "Docker Agent mode requires POSIX host paths; use WSL on Windows")
         if shutil.which("docker") is None:
-            raise PipelineError("input", "--llm-runtime docker requires Docker on the host PATH")
-        if not args.llm_docker_image or args.llm_docker_image.startswith("-"):
-            raise PipelineError("input", "--llm-docker-image must name a verifier image")
+            raise PipelineError("input", "--agent-runtime docker requires Docker on the host PATH")
+        if not args.agent_docker_image or args.agent_docker_image.startswith("-"):
+            raise PipelineError("input", "--agent-docker-image must name a verifier image")
         for path in [output_dir, *(Path(value).expanduser().resolve() for value in args.include)]:
             validate_mount_path(path)
 
@@ -72,11 +72,11 @@ def wrapper_command(args, source, output_dir, contracts, annotated, evidence_fil
                     str(source), "--contracts", str(contracts), "-o", str(annotated),
                     "--verify", "--verification-json", str(evidence_file),
                     *(f"--frama-c-option={value}" for value in options)]
-    if args.llm_runtime == "local":
-        wrapper = Path(args.llm_skill).expanduser().resolve().parent / "scripts/generate_acsl.py"
+    if args.agent_runtime == "local":
+        wrapper = Path(args.agent_skill).expanduser().resolve().parent / "scripts/generate_acsl.py"
         return [sys.executable, str(wrapper), *wrapper_args], None
     name = f"autodeduct-logos-{uuid.uuid4().hex}"
-    command = docker_run_options(args.llm_docker_platform, name)
+    command = docker_run_options(args.agent_docker_platform, name)
     # Preserve absolute paths so verifier evidence matches the host task exactly.
     roots = {source.parent, *(Path(value).expanduser().resolve() for value in args.include)}
     for root in sorted(roots, key=str):
@@ -85,7 +85,7 @@ def wrapper_command(args, source, output_dir, contracts, annotated, evidence_fil
             raise PipelineError("input", f"include/source directory does not exist: {root}")
         command += ["--mount", f"type=bind,source={root},target={root},readonly"]
     command += ["--mount", f"type=bind,source={output_dir},target={output_dir}",
-                "--workdir", str(output_dir), args.llm_docker_image,
+                "--workdir", str(output_dir), args.agent_docker_image,
                 "python3", "/opt/logos/skill/scripts/generate_acsl.py", *wrapper_args]
     return command, name
 
@@ -129,20 +129,20 @@ def validate_annotation_only(source, annotated):
 
 
 def run_skill_workflow(args, source, output_dir, report):
-    if args.llm_runtime == "local":
+    if args.agent_runtime == "local":
         return _run_skill_workflow(args, source, output_dir, report,
-                                   Path(args.llm_skill).expanduser().resolve())
+                                   Path(args.agent_skill).expanduser().resolve())
 
-    image_id = resolve_image(args.llm_docker_image, name="logos_image", report=report,
+    image_id = resolve_image(args.agent_docker_image, name="logos_image", report=report,
                              output_dir=output_dir, timeout=args.timeout)
     if image_id is None:
         return report
     pinned_args = copy.copy(args)
-    pinned_args.llm_docker_image = image_id
+    pinned_args.agent_docker_image = image_id
     name = f"autodeduct-logos-{uuid.uuid4().hex}"
     extraction = run_container_stage(
         name="logos_skill", description="Extract the LOGOS skill from the pinned verifier image",
-        command=[*docker_run_options(args.llm_docker_platform, name), image_id, "python3", "-c",
+        command=[*docker_run_options(args.agent_docker_platform, name), image_id, "python3", "-c",
                  "from pathlib import Path; print(Path('/opt/logos/skill/SKILL.md').read_text(encoding='utf-8'), end='')"],
         container_name=name, report=report, cwd=output_dir, output_dir=output_dir,
         timeout=args.timeout,
@@ -157,7 +157,7 @@ def run_skill_workflow(args, source, output_dir, report):
         extraction.error = "the verifier image contains an empty LOGOS SKILL.md"
         report.errors.append({"stage": extraction.name, "message": extraction.error})
         return report
-    snapshot = output_dir / "llm-skill.md"
+    snapshot = output_dir / "agent-skill.md"
     output_info = output_dir.stat()
     output_identity = (output_info.st_dev, output_info.st_ino)
     extraction.artifact = str(snapshot)
@@ -176,11 +176,11 @@ def _run_skill_workflow(args, source, output_dir, report, skill):
     try:
         source_text = source.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as error:
-        report.errors.append({"stage": "llm_contracts", "message": str(error)})
+        report.errors.append({"stage": "agent_contracts", "message": str(error)})
         return report
-    contracts = output_dir / "llm-contracts.json"
+    contracts = output_dir / "agent-contracts.json"
     annotated = output_dir / SAIDA_OUTPUT
-    evidence_file = output_dir / "llm-verification.json"
+    evidence_file = output_dir / "agent-verification.json"
     try:
         skill_text = skill.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as error:
@@ -195,7 +195,7 @@ def _run_skill_workflow(args, source, output_dir, report, skill):
         check_dependencies=True,
     )
     environment = run_container_stage(
-        name="logos_environment", description=f"Check LOGOS verification dependencies ({args.llm_runtime})",
+        name="logos_environment", description=f"Check LOGOS verification dependencies ({args.agent_runtime})",
         command=environment_command, cwd=output_dir, output_dir=output_dir,
         timeout=args.timeout, container_name=environment_container, report=report,
     )
@@ -206,11 +206,11 @@ def _run_skill_workflow(args, source, output_dir, report, skill):
     command, container_name = wrapper_command(
         args, source, output_dir, contracts, annotated, evidence_file, options,
     )
-    task_file = output_dir / "llm-task.json"
+    task_file = output_dir / "agent-task.json"
     write_text(task_file, json.dumps({
         "workflow": "generate-only",
         "skill_sha256": skill_sha256,
-        "docker_image_id": args.llm_docker_image if args.llm_runtime == "docker" else None,
+        "docker_image_id": args.agent_docker_image if args.agent_runtime == "docker" else None,
         "skill": str(skill), "source": str(source),
         "contracts": str(contracts), "annotated_source": str(annotated),
         "verification_json": str(evidence_file), "verification_options": options,
@@ -229,14 +229,14 @@ def _run_skill_workflow(args, source, output_dir, report, skill):
         "If dependencies or permissions are unavailable, report the failure. "
         "Do not weaken the requested proof or substitute a different verifier."
     )
-    runner = command_words(args.llm_runner)
+    runner = command_words(args.agent_runner)
     # Codex's automatic approval mode already selects workspace-write.
     sandbox = [] if "--approve-for-me" in runner else ["--sandbox", "workspace-write"]
     workflow = run_stage(
-        name="llm_workflow", description="Generate contracts using the host Codex skill",
+        name="agent_workflow", description="Generate contracts using the host Codex skill",
         command=[*runner, "--cd", str(output_dir),
                  "--skip-git-repo-check", *sandbox, "--json",
-                 "--output-last-message", str(output_dir / "llm-final.txt"), prompt],
+                 "--output-last-message", str(output_dir / "agent-final.txt"), prompt],
         cwd=output_dir, output_dir=output_dir, timeout=args.timeout, artifact=contracts,
     )
     report.stages.append(workflow)
@@ -257,10 +257,10 @@ def _run_skill_workflow(args, source, output_dir, report, skill):
         if annotated.exists() or evidence_file.exists():
             raise ValueError("generate-only runner must not write annotated source or verifier evidence")
     except (OSError, ValueError) as error:
-        report.errors.append({"stage": "llm_contracts", "message": str(error)})
+        report.errors.append({"stage": "agent_contracts", "message": str(error)})
         return report
     wrapper = run_container_stage(
-        name="logos_verify", description=f"Annotate and verify with LOGOS ({args.llm_runtime})",
+        name="logos_verify", description=f"Annotate and verify with LOGOS ({args.agent_runtime})",
         command=command, cwd=output_dir, output_dir=output_dir,
         timeout=args.timeout, artifact=evidence_file,
         container_name=container_name, report=report,

@@ -1,6 +1,6 @@
-# LLM Docker quickstart
+# Agent Docker quickstart
 
-[Project overview](../README.md) · [LLM setup and usage](LLM.md) · [Installation](INSTALLATION.md)
+[Project overview](../README.md) · [Agent setup and usage](AGENT.md) · [Installation](INSTALLATION.md)
 
 This workflow uses host Python 3.10+, Git, authenticated
 [Codex CLI](https://learn.chatgpt.com/docs/cli), and a running Docker installation.
@@ -15,17 +15,17 @@ image first; the launcher does not build or pull it automatically. Building need
 ## Windows (WSL 2)
 
 Run this workflow inside an Ubuntu WSL 2 terminal. Native PowerShell, Command
-Prompt and Git Bash are not supported launch environments for LLM Docker mode.
+Prompt and Git Bash are not supported launch environments for Agent Docker mode.
 Python, Git and Codex must be installed inside WSL; a Windows Codex installation
 alone is insufficient.
 
-**The full LLM Docker command requires WSL 2, even when you invoke the launcher
+**The full Agent Docker command requires WSL 2, even when you invoke the launcher
 explicitly with Python.** Docker runs the verifier in Linux, but the AutoDeduct
 launcher still runs in the environment where you start Python. Native Windows
-Python with `--llm-runtime docker` stops with:
+Python with `--agent-runtime docker` stops with:
 
 ```text
-ERROR [input]: Docker LLM mode requires POSIX host paths; use WSL on Windows
+ERROR [input]: Docker Agent mode requires POSIX host paths; use WSL on Windows
 ```
 
 Changing the output directory or adding a `python` prefix does not resolve this
@@ -38,7 +38,7 @@ only, use Windows Python 3.10+ explicitly from the checkout in PowerShell:
 
 ```powershell
 python .\bin\autodeduct --version
-python .\bin\autodeduct llm --help
+python .\bin\autodeduct agent --help
 ```
 
 **The two PowerShell commands above are version/help checks only.** Run contract
@@ -77,11 +77,11 @@ also be invoked explicitly with Linux Python **inside that WSL terminal**, from
 the checkout:
 
 ```bash
-python3 ./bin/autodeduct llm \
-  --llm-runtime docker \
-  --llm-docker-image auto-deduct:latest \
+python3 ./bin/autodeduct agent \
+  --agent-runtime docker \
+  --agent-docker-image auto-deduct:latest \
   --timeout 1200 --wp-rte \
-  --output-dir /tmp/autodeduct-stee-llm \
+  --output-dir /tmp/autodeduct-stee-agent \
   examples/ase-2024/stee.c
 ```
 
@@ -135,21 +135,21 @@ cd auto-deduct
 export PATH="$PWD/bin:$PATH"
 
 autodeduct --version
-autodeduct llm --help
+autodeduct agent --help
 
 docker build --secret id=github_token,env=GH_TOKEN --platform linux/amd64 \
   -t auto-deduct:latest \
   -f Dockerfiles/AutoDeductDockerfile .
 
-autodeduct llm \
-  --llm-runtime docker \
-  --llm-docker-image auto-deduct:latest \
+autodeduct agent \
+  --agent-runtime docker \
+  --agent-docker-image auto-deduct:latest \
   --timeout 1200 --wp-rte \
-  --output-dir /tmp/autodeduct-stee-llm \
+  --output-dir /tmp/autodeduct-stee-agent \
   examples/ase-2024/stee.c
 
-python3 -m json.tool /tmp/autodeduct-stee-llm/report.json
-cat /tmp/autodeduct-stee-llm/inferred.wp-report.txt
+python3 -m json.tool /tmp/autodeduct-stee-agent/report.json
+cat /tmp/autodeduct-stee-agent/inferred.wp-report.txt
 ```
 
 This run sends source/specifications to the configured model through Codex.
@@ -160,12 +160,12 @@ If generation fails before verification, the WP reports may be absent; inspect
 
 | Platform | Command after verification |
 | --- | --- |
-| Ubuntu desktop | `xdg-open /tmp/autodeduct-stee-llm/inferred.wp-report.pdf` |
-| macOS | `open /tmp/autodeduct-stee-llm/inferred.wp-report.pdf` |
-| Windows/WSL 2 | `explorer.exe "$(wslpath -w /tmp/autodeduct-stee-llm)"` then open the PDF in that folder |
+| Ubuntu desktop | `xdg-open /tmp/autodeduct-stee-agent/inferred.wp-report.pdf` |
+| macOS | `open /tmp/autodeduct-stee-agent/inferred.wp-report.pdf` |
+| Windows/WSL 2 | `explorer.exe "$(wslpath -w /tmp/autodeduct-stee-agent)"` then open the PDF in that folder |
 
 On Ubuntu, install `xdg-utils` if `xdg-open` is missing. On a headless server,
 read the text report or copy the PDF to a computer with a PDF viewer.
 This quickstart targets the current AMD64 toolchain; ARM Linux hosts need
-working AMD64 emulation. See [LLM usage](LLM.md) for local verification,
+working AMD64 emulation. See [Agent usage](AGENT.md) for local verification,
 custom images and further options.

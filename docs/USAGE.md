@@ -1,6 +1,6 @@
 # Common usage
 
-[Documentation index](README.md) · [Deductive mode](DEDUCTIVE.md) · [LLM mode](LLM.md)
+[Documentation index](README.md) · [Deductive mode](DEDUCTIVE.md) · [Agent mode](AGENT.md)
 
 ## Select a mode
 
@@ -8,7 +8,7 @@
 autodeduct --help
 autodeduct --version
 autodeduct deductive [options] SOURCE_OR_DIRECTORY
-autodeduct llm [options] SOURCE_OR_DIRECTORY
+autodeduct agent [options] SOURCE_OR_DIRECTORY
 autodeduct acta [options] SOURCE_OR_DIRECTORY
 ```
 
@@ -19,16 +19,16 @@ the checkout otherwise. The traditional Docker command is shown in
 Mode-specific guides:
 
 - [Deductive mode](DEDUCTIVE.md): Docker, local execution, outputs and manual stages.
-- [LLM mode](LLM.md): host setup, local versus Docker verification, Codex profiles,
+- [Agent mode](AGENT.md): host setup, local versus Docker verification, Codex profiles,
   contract JSON handoff and reports.
 - [AcTa/CBMC mode](ACTA.md): existing entry contracts, local/Docker execution,
   CBMC options, loop bounds and evidence.
 
-The default is deductive. `--mode deductive`, `--mode llm`, and `--mode acta`
+The default is deductive. `--mode deductive`, `--mode agent`, and `--mode acta`
 flags are alternatives to the mode commands; choose one form. Reports use
-`mode: "deductive"` for deductive mode, `mode: "llm"` for LLM mode, and
+`mode: "deductive"` for deductive mode, `mode: "agent"` for Agent mode, and
 `mode: "acta"` for AcTa mode.
-There is no automatic fallback between modes. Use `./llm` or `./deductive` for
+There is no automatic fallback between modes. Use `./agent` or `./deductive` for
 input directories with those names; use `./acta` for a directory named `acta`.
 
 ## Common options
@@ -63,7 +63,7 @@ provide one analysis translation unit and its headers with `--include`.
 Headers are not source inputs.
 
 Use a separate output directory. It must not contain input files or overlap a
-selected source directory. For LLM mode, the skill and runner files must also
+selected source directory. For Agent mode, the skill and runner files must also
 be outside it. Known artifacts from an earlier valid run are cleared so stale
 reports cannot count as a current proof.
 
@@ -78,27 +78,27 @@ errors use exit `2`. Retain `report.json` and stage logs for diagnosis.
 See [pipeline and diagnostics](PIPELINE.md) for stage status, evidence validation
 and proof assumptions, and [limitations](LIMITATIONS.md) for unsupported inputs.
 
-## LLM mode
+## Agent mode
 
-See the dedicated [LLM setup and usage guide](LLM.md).
+See the dedicated [Agent setup and usage guide](AGENT.md).
 
 | Option | Purpose |
 | --- | --- |
-| `--llm-runtime local\|docker` | Where the LOGOS wrapper verifies; default `local`, with Codex on the host in both cases |
-| `--llm-docker-image IMAGE` | Existing local verifier image name:tag or ID; default `auto-deduct:latest`; no automatic build or pull |
-| `--llm-docker-platform PLATFORM` | Verifier architecture; default `linux/amd64` |
+| `--agent-runtime local\|docker` | Where the LOGOS wrapper verifies; default `local`, with Codex on the host in both cases |
+| `--agent-docker-image IMAGE` | Existing local verifier image name:tag or ID; default `auto-deduct:latest`; no automatic build or pull |
+| `--agent-docker-platform PLATFORM` | Verifier architecture; default `linux/amd64` |
 
 If you build with a custom image name, pass that name to the launcher. See
-the [matching build and run commands](LLM.md#choose-a-custom-image-name).
+the [matching build and run commands](AGENT.md#choose-a-custom-image-name).
 
 ## Docker
 
 See [deductive Docker usage](DEDUCTIVE.md#run-in-docker) or
-[LLM Docker verification](LLM.md#run-with-docker-verification), or
+[Agent Docker verification](AGENT.md#run-with-docker-verification), or
 [AcTa/CBMC Docker usage](ACTA.md#docker-from-the-host-launcher).
 
 ## Without Docker
 
 See [deductive local usage](DEDUCTIVE.md#run-locally) or
-[LLM local verification](LLM.md#local-verification-dependencies), or
+[Agent local verification](AGENT.md#local-verification-dependencies), or
 [AcTa/CBMC local setup](ACTA.md#without-docker).

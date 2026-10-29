@@ -1,4 +1,4 @@
-"""Orchestrate deductive, LLM and AcTa workflows and the CLI entry point."""
+"""Orchestrate deductive, Agent and AcTa workflows and the CLI entry point."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from typing import Sequence
 
 from .cli import VERSION, parser, validate_forwarded_options
 from .acta import protect_acta_runtime, run_acta_workflow, validate_acta_options
-from .llm import run_skill_workflow, validate_llm_options
+from .agent import run_skill_workflow, validate_agent_options
 from .diagnostics import (
     isp_limit_diagnostic,
     isp_partial_diagnostic,
@@ -64,7 +64,7 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
             input_roots.append(source)
     validate_output_directory(requested_files, output_dir, input_roots)
     # The skill and runner must survive output cleanup too.
-    validate_llm_options(args, output_dir)
+    validate_agent_options(args, output_dir)
     protect_acta_runtime(args, output_dir)
     invalidate_stale_report(output_dir)
     validate_forwarded_options(args)
@@ -86,7 +86,7 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
         output_directory=str(output_dir),
     )
 
-    if args.mode == "llm":
+    if args.mode == "agent":
         return run_skill_workflow(args, inputs[0], output_dir, report)
     if args.mode == "acta":
         return run_acta_workflow(args, inputs[0], output_dir, report)
@@ -276,7 +276,7 @@ def run_pipeline(args: argparse.Namespace) -> PipelineReport:
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     cli = parser()
-    if arguments and arguments[0] in {"llm", "deductive", "acta"}:
+    if arguments and arguments[0] in {"agent", "deductive", "acta"}:
         mode = arguments.pop(0)
         options = arguments[:arguments.index("--")] if "--" in arguments else arguments
         if any(word == "--mode" or word.startswith("--mode=") for word in options):

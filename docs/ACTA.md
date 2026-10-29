@@ -80,7 +80,7 @@ Then, from the AutoDeduct checkout:
   --entry-point compute --output-dir /tmp/autodeduct-acta
 ```
 
-Only AcTa and CBMC are used in this mode; Saida, TriCera, ISP, WP and LLM
+Only AcTa and CBMC are used in this mode; Saida, TriCera, ISP, WP and Agent
 dependencies are unnecessary. If you built AcTa without installing it, pass
 `--acta-plugin /absolute/path/to/AcTa/_build/default/src/Acta.cmxs`.
 The plugin and its Frama-C executable must be built for the same version.
@@ -160,7 +160,7 @@ python3 -m unittest discover -s tests -p test_acta_integration.py -v
 For local tool execution, set `AUTODEDUCT_RUN_ACTA_LOCAL=1` instead. The checks
 cover a correct contract, a counterexample, insufficient and sufficient loop
 unwinding, unsupported/missing contracts, headers, custom entry points, and
-paths containing spaces. No LLM calls are involved.
+paths containing spaces. No language-model calls are involved.
 
 CI builds the standard image and runs the toolchain checks when the repository
 secret `ACTA_GITHUB_TOKEN` has read access to AcTa. Without it, the image and

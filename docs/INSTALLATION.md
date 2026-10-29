@@ -1,6 +1,6 @@
 # Installation
 
-[Documentation index](README.md) · [Deductive usage](DEDUCTIVE.md) · [LLM setup and usage](LLM.md)
+[Documentation index](README.md) · [Deductive usage](DEDUCTIVE.md) · [Agent setup and usage](AGENT.md)
 
 Choose a setup before running a command:
 
@@ -8,17 +8,17 @@ Choose a setup before running a command:
 | --- | --- |
 | Deductive with Docker | Build the [standard image](#standard-docker-image); host Python/Codex are unnecessary |
 | Deductive locally | Install the [native toolchain](#native-installation) and host launcher |
-| LLM locally | Install the [host launcher](#host-launcher), then follow [LLM local setup](LLM.md#local-verification-dependencies) |
-| LLM with Docker verification | Install the host launcher, then follow [LLM Docker setup](LLM.md#build-the-verifier-image) |
+| Agent locally | Install the [host launcher](#host-launcher), then follow [Agent local setup](AGENT.md#local-verification-dependencies) |
+| Agent with Docker verification | Install the host launcher, then follow [Agent Docker setup](AGENT.md#build-the-verifier-image) |
 | AcTa/CBMC locally or with Docker | Follow [AcTa setup](ACTA.md); its optional image target supplies both tools for Docker execution |
 
 ## Host launcher
 
-For Windows/WSL 2, Ubuntu and macOS setup and a complete LLM Docker example,
-see the [operating-system quickstart](LLM_DOCKER_QUICKSTART.md).
+For Windows/WSL 2, Ubuntu and macOS setup and a complete Agent Docker example,
+see the [operating-system quickstart](AGENT_DOCKER_QUICKSTART.md).
 Run the launcher in WSL 2 on Windows; the commands below use Bash/Zsh syntax.
 
-Both LLM runtimes need AutoDeduct on the host, plus Python 3.10+.
+Both Agent runtimes need AutoDeduct on the host, plus Python 3.10+.
 A separate package installation is unnecessary. Clone the repository and use its
 included executable:
 
@@ -37,13 +37,13 @@ autodeduct --version
 
 The export applies to the current terminal. For future sessions, add the absolute
 checkout `bin/` path to your shell's `PATH` setup. Installing only the Docker image
-is insufficient for LLM mode. The traditional Docker command runs the CLI inside
+is insufficient for Agent mode. The traditional Docker command runs the CLI inside
 the image and does not need a host CLI installation.
 
-LLM Docker mode extracts the LOGOS skill from its verifier image. A separate
+Agent Docker mode extracts the LOGOS skill from its verifier image. A separate
 local LOGOS checkout is required only for local verification. The standard
 Docker build fetches LOGOS itself, alongside the other components.
-See [LLM setup](LLM.md).
+See [Agent setup](AGENT.md).
 
 <a id="traditional-docker-toolchain"></a>
 
@@ -91,11 +91,11 @@ No separate LOGOS or AcTa checkout is needed. Supply the GitHub build secret
 for private AcTa access as described above.
 
 You may choose another image name with `docker build -t NAME:TAG`, keeping the
-same build secret. For LLM
-Docker runs, select it with `--llm-docker-image NAME:TAG`; for deductive Docker
-runs, use it as the image argument to `docker run`. LLM mode defaults to
+same build secret. For Agent
+Docker runs, select it with `--agent-docker-image NAME:TAG`; for deductive Docker
+runs, use it as the image argument to `docker run`. Agent mode defaults to
 `auto-deduct:latest` and never builds or pulls the selected image automatically.
-See the [custom image example](LLM.md#choose-a-custom-image-name).
+See the [custom image example](AGENT.md#choose-a-custom-image-name).
 
 ## Apple Silicon
 
@@ -202,8 +202,8 @@ autodeduct --version
 Docker remains the reproducible option when compatible host components are
 not already installed.
 
-## LOGOS for LLM mode
+## LOGOS for Agent mode
 
-The complete guide has moved to [LLM setup and usage](LLM.md). It covers the
+The complete guide has moved to [Agent setup and usage](AGENT.md). It covers the
 compatible LOGOS revision, host Codex login, local dependencies, verifier image
 build and runtime selection. Codex inside Docker is unsupported.

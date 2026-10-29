@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bin"))
 from autodeduct_pipeline import parser, run_pipeline, PipelineError
-from autodeduct_pipeline.llm import validate_annotation_only, validate_llm_options
+from autodeduct_pipeline.agent import validate_annotation_only, validate_agent_options
 
 SOURCE = "int helper(void)\n{\n    return 1;\n}\n/*@ ensures \\result == 1; */\nint main(void)\n{\n    return helper();\n}\n"
 ANNOTATED = "/*@ assigns \\nothing; ensures \\result == 1; */\n" + SOURCE
@@ -19,9 +19,9 @@ IMAGE_ID = "sha256:" + "a" * 64
 IMAGE_SKILL = "Use the image's LOGOS contract skill. λόγος\n"
 
 
-class LLMModeTests(unittest.TestCase):
+class AgentModeTests(unittest.TestCase):
     def setUp(self):
-        guard = patch("autodeduct_pipeline.llm.in_container", return_value=False)
+        guard = patch("autodeduct_pipeline.agent.in_container", return_value=False)
         guard.start()
         self.addCleanup(guard.stop)
 
@@ -37,12 +37,12 @@ class LLMModeTests(unittest.TestCase):
             (root / "scripts/generate_acsl.py").write_text("# test wrapper")
             output = root / "output"
             output.mkdir()
-            for artifact in ("llm-verification.json", "llm-contracts.json", "inferred.c"):
+            for artifact in ("agent-verification.json", "agent-contracts.json", "inferred.c"):
                 (output / artifact).write_text("stale")
             args = parser().parse_args([
-                "--mode", "llm", "--llm-runner", runner,
-                *(["--llm-skill", str(skill)] if runtime == "local" else []),
-                "--llm-runtime", runtime,
+                "--mode", "agent", "--agent-runner", runner,
+                *(["--agent-skill", str(skill)] if runtime == "local" else []),
+                "--agent-runtime", runtime,
                 "--wp-rte", "--wp-option=-wp-prover=qed", "--output-dir", str(output), str(source),
             ])
             commands = []
@@ -70,7 +70,7 @@ class LLMModeTests(unittest.TestCase):
                         raise subprocess.TimeoutExpired(command, 1)
                     return subprocess.CompletedProcess(command, 0, "LOGOS verification dependencies are available", "")
                 commands.append(command)
-                task = json.loads((output / "llm-task.json").read_text())
+                task = json.loads((output / "agent-task.json").read_text())
                 self.assertEqual(task["workflow"], "generate-only")
                 self.assertIn("-wp-rte", task["verification_options"])
                 self.assertIn("-wp-prover=qed", task["verification_options"])
@@ -89,24 +89,24 @@ class LLMModeTests(unittest.TestCase):
                     self.assertIn(str(selected_skill), command[-1])
                     self.assertIn("complete SKILL.md", command[-1])
                     self.assertIn("generate-only", command[-1])
-                    for artifact in ("llm-verification.json", "llm-contracts.json", "inferred.c"):
+                    for artifact in ("agent-verification.json", "agent-contracts.json", "inferred.c"):
                         self.assertFalse((output / artifact).exists())
                     if failure == "runner":
                         return subprocess.CompletedProcess(command, 1, "", "agent unavailable")
                     if failure != "missing":
-                        (output / "llm-contracts.json").write_text(json.dumps({
+                        (output / "agent-contracts.json").write_text(json.dumps({
                             "format": "acsl-contracts-v2", "contracts": {"helper": {}},
                             "metadata": {"source_sha256": hashlib.sha256(SOURCE.encode()).hexdigest()},
                         }))
                     if failure == "agent_evidence":
-                        (output / "llm-verification.json").write_text("{}")
+                        (output / "agent-verification.json").write_text("{}")
                     if failure == "log_symlink":
                         (output / "skill_verify.stdout.log").symlink_to(source)
                     if failure == "changed_skill":
                         selected_skill.chmod(0o600)
                         selected_skill.write_text("changed instructions")
                     if failure == "snapshot_symlink":
-                        (output / "llm-skill.md").symlink_to(source)
+                        (output / "agent-skill.md").symlink_to(source)
                     return subprocess.CompletedProcess(command, 0, "generated contracts", "")
                 if runtime == "docker":
                     self.assertEqual(command[:2], ["docker", "run"])
@@ -137,13 +137,13 @@ class LLMModeTests(unittest.TestCase):
                     evidence["command"].remove("-wp-rte")
                 if failure == "malformed":
                     evidence["returncode"] = "0"
-                (output / "llm-verification.json").write_text(
+                (output / "agent-verification.json").write_text(
                     "invalid json" if failure == "json" else json.dumps(evidence)
                 )
                 return subprocess.CompletedProcess(command, 1 if failure == "wrapper_exit" else 0, "wrapper finished", "")
 
-            with patch("autodeduct_pipeline.llm.in_container", return_value=False), patch(
-                "autodeduct_pipeline.llm.shutil.which", return_value="docker" if runtime == "docker" else None
+            with patch("autodeduct_pipeline.agent.in_container", return_value=False), patch(
+                "autodeduct_pipeline.agent.shutil.which", return_value="docker" if runtime == "docker" else None
             ), patch(
                 "autodeduct_pipeline.stages._run_command", side_effect=fake_run
             ), patch("autodeduct_pipeline.runtime.subprocess.run") as cleanup:
@@ -156,7 +156,7 @@ class LLMModeTests(unittest.TestCase):
                     self.assertEqual(cleanup.call_args.args[0][:3], ["docker", "rm", "--force"])
             self.assertEqual(source.read_text(), SOURCE)
             self.assertIsNone(report.contract_report)
-            self.assertEqual(report.mode, "llm")
+            self.assertEqual(report.mode, "agent")
             setup_failure = failure in {"image", "image_id", "extraction", "extraction_timeout", "empty_skill", "dependencies", "preflight_timeout"}
             self.assertEqual(len(commands), 0 if setup_failure else
                              1 if failure in {"runner", "missing", "agent_evidence", "changed_skill"} else 2)
@@ -164,8 +164,8 @@ class LLMModeTests(unittest.TestCase):
                 self.assertFalse(cached_skill.parent.exists())
             self.assertEqual(list(root.glob(".autodeduct-logos-skill-*")), [])
             if runtime == "docker" and failure not in {"image", "image_id", "extraction", "extraction_timeout", "empty_skill"}:
-                self.assertFalse((output / "llm-skill.md").is_symlink())
-                self.assertEqual((output / "llm-skill.md").read_text(), IMAGE_SKILL)
+                self.assertFalse((output / "agent-skill.md").is_symlink())
+                self.assertEqual((output / "agent-skill.md").read_text(), IMAGE_SKILL)
             return report
 
     def test_host_generation_and_explicit_verification(self):
@@ -173,7 +173,7 @@ class LLMModeTests(unittest.TestCase):
             with self.subTest(runner=runner):
                 report = self.exercise(runner=runner)
                 self.assertEqual(report.status, "passed", report.errors)
-                self.assertEqual([stage.name for stage in report.stages], ["logos_environment", "llm_workflow", "logos_verify", "skill_verify"])
+                self.assertEqual([stage.name for stage in report.stages], ["logos_environment", "agent_workflow", "logos_verify", "skill_verify"])
 
     def test_missing_dependencies_stop_before_generation(self):
         for runtime in ("local", "docker"):
@@ -194,14 +194,14 @@ class LLMModeTests(unittest.TestCase):
         report = self.exercise(runtime="docker")
         self.assertEqual(report.status, "passed", report.errors)
         self.assertEqual([stage.name for stage in report.stages],
-                         ["logos_image", "logos_skill", "logos_environment", "llm_workflow", "logos_verify", "skill_verify"])
+                         ["logos_image", "logos_skill", "logos_environment", "agent_workflow", "logos_verify", "skill_verify"])
 
     def test_docker_image_and_skill_errors_stop_before_generation(self):
         for failure in ("image", "image_id", "extraction", "extraction_timeout", "empty_skill"):
             with self.subTest(failure=failure):
                 report = self.exercise(runtime="docker", failure=failure)
                 self.assertEqual(report.status, "failed")
-                self.assertNotIn("llm_workflow", [stage.name for stage in report.stages])
+                self.assertNotIn("agent_workflow", [stage.name for stage in report.stages])
                 self.assertTrue(report.errors)
 
     def test_modified_extracted_skill_is_rejected(self):
@@ -212,7 +212,7 @@ class LLMModeTests(unittest.TestCase):
     def test_docker_generation_failure_cleans_temporary_skill(self):
         report = self.exercise(runtime="docker", failure="runner")
         self.assertEqual(report.status, "failed")
-        self.assertEqual(report.errors[-1]["stage"], "llm_workflow")
+        self.assertEqual(report.errors[-1]["stage"], "agent_workflow")
 
     @unittest.skipUnless(sys.platform != "win32", "requires ordinary symlink creation")
     def test_extracted_snapshot_cannot_redirect_into_source(self):
@@ -222,13 +222,13 @@ class LLMModeTests(unittest.TestCase):
     def test_docker_ignores_host_skill_but_local_requires_it(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory).resolve()
-            args = parser().parse_args(["--mode", "llm", "--llm-runtime", "docker",
-                                       "--llm-skill", str(output / "nonexistent.md"), "input.c"])
-            with patch("autodeduct_pipeline.llm.shutil.which", return_value="docker"):
-                validate_llm_options(args, output)
-            args.llm_runtime = "local"
-            with self.assertRaisesRegex(PipelineError, "set --llm-skill"):
-                validate_llm_options(args, output)
+            args = parser().parse_args(["--mode", "agent", "--agent-runtime", "docker",
+                                       "--agent-skill", str(output / "nonexistent.md"), "input.c"])
+            with patch("autodeduct_pipeline.agent.shutil.which", return_value="docker"):
+                validate_agent_options(args, output)
+            args.agent_runtime = "local"
+            with self.assertRaisesRegex(PipelineError, "set --agent-skill"):
+                validate_agent_options(args, output)
 
     @unittest.skipUnless(sys.platform != "win32", "requires ordinary symlink creation")
     def test_generator_cannot_redirect_verification_logs_into_source(self):
@@ -266,7 +266,7 @@ class LLMModeTests(unittest.TestCase):
             output = Path(directory).resolve()
             skill = output / "SKILL.md"
             skill.write_text("keep me")
-            args = parser().parse_args(["--mode", "llm", "--llm-skill", str(skill), "--output-dir", str(output), "/unrelated/input.c"])
+            args = parser().parse_args(["--mode", "agent", "--agent-skill", str(skill), "--output-dir", str(output), "/unrelated/input.c"])
             with self.assertRaises(PipelineError):
                 run_pipeline(args)
             self.assertEqual(skill.read_text(), "keep me")
@@ -280,14 +280,14 @@ class LLMModeTests(unittest.TestCase):
             (root / "scripts/generate_acsl.py").write_text("# test wrapper")
             output = root / "output"
             output.mkdir()
-            args = parser().parse_args(["--mode", "llm", "--llm-skill", str(skill), "input.c"])
+            args = parser().parse_args(["--mode", "agent", "--agent-skill", str(skill), "input.c"])
             with patch("os.getcwd", return_value=str(output)):
-                validate_llm_options(args, output)
+                validate_agent_options(args, output)
             runner = output / "runner.py"
             runner.write_text("keep me")
-            args.llm_runner = f"python3 {runner}"
+            args.agent_runner = f"python3 {runner}"
             with self.assertRaises(PipelineError):
-                validate_llm_options(args, output)
+                validate_agent_options(args, output)
             self.assertEqual(runner.read_text(), "keep me")
 
     def test_local_runtime_cannot_be_inside_writable_output(self):
@@ -300,19 +300,19 @@ class LLMModeTests(unittest.TestCase):
             runtime.mkdir()
             wrapper = runtime / "generate_acsl.py"
             wrapper.write_text("keep wrapper outside agent workspace")
-            args = parser().parse_args(["--mode", "llm", "--llm-skill", str(skill), "input.c"])
+            args = parser().parse_args(["--mode", "agent", "--agent-skill", str(skill), "input.c"])
             for output in (runtime, runtime / "output"):
                 with self.subTest(output=output), self.assertRaisesRegex(PipelineError, "LOGOS runtime files must be outside"):
-                    validate_llm_options(args, output)
+                    validate_agent_options(args, output)
             self.assertEqual(wrapper.read_text(), "keep wrapper outside agent workspace")
 
     def test_container_launch_is_rejected_before_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory).resolve()
-            artifact = output / "llm-contracts.json"
+            artifact = output / "agent-contracts.json"
             artifact.write_text("keep me")
-            args = parser().parse_args(["--mode", "llm", "--output-dir", str(output), "/unrelated/input.c"])
-            with patch("autodeduct_pipeline.llm.in_container", return_value=True), self.assertRaisesRegex(
+            args = parser().parse_args(["--mode", "agent", "--output-dir", str(output), "/unrelated/input.c"])
+            with patch("autodeduct_pipeline.agent.in_container", return_value=True), self.assertRaisesRegex(
                 PipelineError, "must be launched on the host"
             ):
                 run_pipeline(args)
@@ -320,7 +320,7 @@ class LLMModeTests(unittest.TestCase):
 
     def test_old_contracts_option_is_removed(self):
         with self.assertRaises(SystemExit):
-            parser().parse_args(["--mode", "llm", "--contracts", "contracts.json", "input.c"])
+            parser().parse_args(["--mode", "agent", "--contracts", "contracts.json", "input.c"])
 
     def test_annotation_guard_preserves_code_existing_specs_and_strings(self):
         validate_annotation_only(SOURCE, ANNOTATED)

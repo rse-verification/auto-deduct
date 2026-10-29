@@ -222,7 +222,7 @@ RUN ln -s /home/dev/repos/tricera/tri && \
 ##
 # Stage 5 - Add AutoDeduct Frama-C plugins and CLI
 #
-# The CLI selects the deductive, LLM or AcTa workflow at runtime.
+# The CLI selects the deductive, Agent or AcTa workflow at runtime.
 #
 FROM auto-deduct-tricera AS auto-deduct-runtime
 
@@ -297,7 +297,7 @@ RUN : "${LOGOS_REPO:?LOGOS_REPO must not be empty}" && \
   git -C /tmp/logos rev-parse HEAD > /opt/logos/REVISION && \
   rm -rf /tmp/logos
 
-ENV AUTODEDUCT_LLM_SKILL=/opt/logos/skill/SKILL.md
+ENV AUTODEDUCT_AGENT_SKILL=/opt/logos/skill/SKILL.md
 ENV AUTODEDUCT_CONTAINER=1
 # The host UID may have no passwd entry; keep Why3's configured prover location.
 ENV HOME=/home/dev

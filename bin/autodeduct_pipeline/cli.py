@@ -70,37 +70,37 @@ def validate_forwarded_options(args: argparse.Namespace) -> None:
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="autodeduct",
-        usage="%(prog)s [llm|deductive|acta] [options] SOURCE_OR_DIRECTORY",
+        usage="%(prog)s [agent|deductive|acta] [options] SOURCE_OR_DIRECTORY",
         description=(
             "Use 'deductive' for Saida/TriCera/ISP/Eva inference and WP, "
-            "or 'llm' for the LOGOS skill workflow through Codex. "
+            "or 'agent' for the LOGOS skill workflow through Codex. "
             "Use 'acta' to generate a harness from an existing entry contract and check it with CBMC."
         ),
     )
     result.add_argument("--version", action="version", version=f"AutoDeduct {VERSION}")
     result.add_argument("--json", action="store_true", help="print the final report as JSON")
     result.add_argument(
-        "--mode", choices=("deductive", "llm", "acta"), default="deductive",
-        help="alternative to the llm/deductive/acta command; default: deductive",
+        "--mode", choices=("deductive", "agent", "acta"), default="deductive",
+        help="alternative to the agent/deductive/acta command; default: deductive",
     )
     result.add_argument(
-        "--llm-skill", default=os.environ.get("AUTODEDUCT_LLM_SKILL"),
-        metavar="SKILL_MD", help="local runtime skill (or AUTODEDUCT_LLM_SKILL); Docker extracts its skill from the image",
+        "--agent-skill", default=os.environ.get("AUTODEDUCT_AGENT_SKILL"),
+        metavar="SKILL_MD", help="local runtime skill (or AUTODEDUCT_AGENT_SKILL); Docker extracts its skill from the image",
     )
     result.add_argument(
-        "--llm-runner", default=os.environ.get("AUTODEDUCT_LLM_RUNNER", "codex exec"),
-        metavar="COMMAND", help="Codex exec command (or AUTODEDUCT_LLM_RUNNER; default: codex exec)",
+        "--agent-runner", default=os.environ.get("AUTODEDUCT_AGENT_RUNNER", "codex exec"),
+        metavar="COMMAND", help="Codex exec command (or AUTODEDUCT_AGENT_RUNNER; default: codex exec)",
     )
     result.add_argument(
-        "--llm-runtime", choices=("local", "docker"), default="local",
+        "--agent-runtime", choices=("local", "docker"), default="local",
         help="run the LOGOS wrapper locally or in Docker; Codex always runs on the host (default: local)",
     )
     result.add_argument(
-        "--llm-docker-image", default="auto-deduct:latest", metavar="IMAGE",
-        help="existing local LOGOS verifier image name:tag or ID for --llm-runtime docker; no automatic build or pull (default: %(default)s)",
+        "--agent-docker-image", default="auto-deduct:latest", metavar="IMAGE",
+        help="existing local LOGOS verifier image name:tag or ID for --agent-runtime docker; no automatic build or pull (default: %(default)s)",
     )
     result.add_argument(
-        "--llm-docker-platform", default="linux/amd64", metavar="PLATFORM",
+        "--agent-docker-platform", default="linux/amd64", metavar="PLATFORM",
         help="verifier image platform (default: %(default)s)",
     )
     result.add_argument(

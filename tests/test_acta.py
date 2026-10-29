@@ -101,7 +101,7 @@ class ActaTests(unittest.TestCase):
 
     def test_local_and_docker_import_the_acta_report(self):
         defaults = parser().parse_args(["input.c"])
-        self.assertEqual(defaults.acta_docker_image, defaults.llm_docker_image)
+        self.assertEqual(defaults.acta_docker_image, defaults.agent_docker_image)
         self.assertEqual(defaults.acta_docker_image, "auto-deduct:latest")
         for runtime in ("local", "docker"):
             with self.subTest(runtime=runtime):

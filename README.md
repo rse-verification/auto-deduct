@@ -1,7 +1,7 @@
 # AutoDeduct “Double Ducks”
 
 **Release candidate.** AutoDeduct generates and verifies ACSL contracts for C
-programs. Choose deductive inference, LLM-assisted contract generation, or
+programs. Choose deductive inference, Agent-assisted contract generation, or
 bounded verification of existing contracts with AcTa and CBMC.
 
 AutoDeduct accepts one C translation unit and its headers. Generated files and
@@ -12,12 +12,12 @@ reports go into a separate output directory; the original source stays unchanged
 | Workflow | What it does | Setup and usage |
 | --- | --- | --- |
 | `deductive` (default) | Infers contracts with Saida/TriCera and ISP/Eva, then checks them with Frama-C WP | [Deductive guide](docs/DEDUCTIVE.md) |
-| `llm` | Generates contracts with host Codex using [LOGOS](https://github.com/rse-verification/logos), then checks them with Frama-C WP | [LLM guide](docs/LLM.md) · [Platform quickstart](docs/LLM_DOCKER_QUICKSTART.md) |
+| `agent` | Generates contracts with host Codex using [LOGOS](https://github.com/rse-verification/logos), then checks them with Frama-C WP | [Agent guide](docs/AGENT.md) · [Platform quickstart](docs/AGENT_DOCKER_QUICKSTART.md) |
 | `acta` | Uses [AcTa](https://github.com/rse-verification/AcTa) to generate a harness from an existing entry contract and check it with CBMC | [AcTa/CBMC guide](docs/ACTA.md) |
 
 All three workflows support local tools or the same standard Docker image.
 The image includes AcTa and CBMC by default and uses Frama-C 33 throughout.
-LLM mode runs Codex on the host in both cases.
+Agent mode runs Codex on the host in both cases.
 
 ## Quick start: deductive verification in Docker
 
@@ -44,15 +44,15 @@ Inspect `autodeduct-output/report.json` and the stage logs. The
 provenance. For native installation, custom images or proxy settings, see
 [Installation](docs/INSTALLATION.md).
 
-For **LLM generation**, follow the
-[Windows/WSL 2, Ubuntu or macOS quickstart](docs/LLM_DOCKER_QUICKSTART.md).
+For **Agent generation**, follow the
+[Windows/WSL 2, Ubuntu or macOS quickstart](docs/AGENT_DOCKER_QUICKSTART.md).
 For **AcTa/CBMC**, follow the [local or Docker setup](docs/ACTA.md).
 
 ## Results and scope
 
 Verification runs write `report.json`, stage logs and workflow-specific artifacts:
 
-- **Deductive and LLM:** generated annotations and WP verification results.
+- **Deductive and Agent:** generated annotations and WP verification results.
 - **AcTa:** the generated harness, AcTa's JSON report and raw CBMC output.
 
 Success means the selected workflow's required checks passed. WP workflows

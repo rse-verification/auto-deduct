@@ -20,13 +20,13 @@ STAGES = import_module("autodeduct_pipeline.stages")
 class AutoDeductPipelineTests(unittest.TestCase):
     def test_mode_commands_and_flags_dispatch(self):
         for words, expected in (
-            (["llm", "input.c"], "llm"),
+            (["agent", "input.c"], "agent"),
             (["deductive", "input.c"], "deductive"),
             (["acta", "input.c"], "acta"),
             (["--mode", "acta", "input.c"], "acta"),
-            (["--mode", "llm", "input.c"], "llm"),
+            (["--mode", "agent", "input.c"], "agent"),
             (["input.c"], "deductive"),
-            (["./llm"], "deductive"),
+            (["./agent"], "deductive"),
         ):
             with self.subTest(arguments=words), patch(
                 "autodeduct_pipeline.pipeline.run_pipeline",
@@ -36,8 +36,8 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 self.assertEqual(run.call_args.args[0].mode, expected)
                 self.assertEqual(run.call_args.args[0].sources, [words[-1]])
         for words in (
-            ["llm", "--mode", "deductive", "input.c"],
-            ["deductive", "--mode=llm", "input.c"],
+            ["agent", "--mode", "deductive", "input.c"],
+            ["deductive", "--mode=agent", "input.c"],
         ):
             with self.subTest(arguments=words), self.assertRaises(SystemExit) as error:
                 MODULE.main(words)
@@ -102,8 +102,8 @@ class AutoDeductPipelineTests(unittest.TestCase):
         self.assertIn("--check-dependencies", dockerfile)
         self.assertIn("ENV HOME=/home/dev", dockerfile)
         self.assertFalse((ROOT / "Dockerfiles/LogosDockerfile").exists())
-        args = MODULE.parser().parse_args(["--mode", "llm", "--llm-runtime", "docker", "input.c"])
-        self.assertEqual(args.llm_docker_image, "auto-deduct:latest")
+        args = MODULE.parser().parse_args(["--mode", "agent", "--agent-runtime", "docker", "input.c"])
+        self.assertEqual(args.agent_docker_image, "auto-deduct:latest")
 
     def test_timeout_must_be_finite_and_positive(self):
         for value in ("0", "-1", "nan", "inf"):
@@ -785,18 +785,18 @@ class AutoDeductPipelineTests(unittest.TestCase):
             original.write_text("keep user data")
             script = (
                 "from pathlib import Path\n"
-                f"Path('llm_workflow.stdout.log').symlink_to({str(original)!r})\n"
+                f"Path('agent_workflow.stdout.log').symlink_to({str(original)!r})\n"
                 "print('generated log')\n"
             )
             result = MODULE.run_stage(
-                name="llm_workflow", description="offline generator",
+                name="agent_workflow", description="offline generator",
                 command=[sys.executable, "-c", script], cwd=output,
                 output_dir=output, timeout=10,
             )
             self.assertEqual(result.status, "passed")
             self.assertEqual(original.read_text(), "keep user data")
-            self.assertFalse((output / "llm_workflow.stdout.log").is_symlink())
-            self.assertEqual((output / "llm_workflow.stdout.log").read_text(), "generated log\n")
+            self.assertFalse((output / "agent_workflow.stdout.log").is_symlink())
+            self.assertEqual((output / "agent_workflow.stdout.log").read_text(), "generated log\n")
 
     @unittest.skipUnless(MODULE.os.name == "posix", "requires ordinary symlink creation")
     def test_stage_rejects_replaced_output_directory(self):
@@ -807,7 +807,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 output.mkdir()
                 victim = root / "victim"
                 victim.mkdir()
-                log = victim / "llm_workflow.stdout.log"
+                log = victim / "agent_workflow.stdout.log"
                 log.write_text("keep user data")
                 replacement = (f"Path({str(output)!r}).symlink_to({str(victim)!r}, target_is_directory=True)" if replace_with_symlink
                                else f"Path({str(victim)!r}).rename({str(output)!r})")
@@ -818,7 +818,7 @@ class AutoDeductPipelineTests(unittest.TestCase):
                 )
                 with self.assertRaisesRegex(OSError, "output directory changed"):
                     MODULE.run_stage(
-                        name="llm_workflow", description="offline generator",
+                        name="agent_workflow", description="offline generator",
                         command=[sys.executable, "-c", script], cwd=output,
                         output_dir=output, timeout=10,
                     )
