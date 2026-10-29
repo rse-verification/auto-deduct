@@ -30,6 +30,9 @@ This is a living document describing the target for each AutoDeduct release.
   annotation and WP evidence validation.
 - Offer local verification and optional Docker verification without container
   Codex or model credentials in the verifier image.
+- Add `autodeduct acta` using [AcTa](https://github.com/rse-verification/AcTa)
+  to generate a harness from an existing entry contract, run CBMC, and import
+  its verification report, with local and Docker execution supported.
 - Keep setup, mode-specific usage, common CLI reference and limitations in
   separate [documentation guides](docs/README.md).
 
