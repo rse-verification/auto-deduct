@@ -1,6 +1,6 @@
 # Pipeline and Diagnostics
 
-[Documentation index](README.md) · [Common usage](USAGE.md) · [LLM usage](LLM.md)
+[Documentation index](README.md) · [Common usage](USAGE.md) · [Agent usage](AGENT.md)
 
 AutoDeduct coordinates existing analysis components. It does not implement a
 C parser, call graph, abstract interpreter, or theorem prover itself.
@@ -22,17 +22,23 @@ annotated C output and uses Eva states to produce additional ACSL clauses. ISP
 also owns reachable-function and missing-contract semantics; AutoDeduct reads
 its JSON report rather than reimplementing the call graph.
 
-With `--mode llm --llm-runtime docker`, `logos_image` resolves the installed
+With `--mode agent --agent-runtime docker`, `logos_image` resolves the installed
 verifier image to an immutable ID, then `logos_skill` extracts its SKILL.md for
 the host agent. These two stages are unnecessary in local mode, which uses the
 configured host skill. `logos_environment` checks wrapper dependencies for the
-selected runtime. `llm_workflow` then invokes Codex with the selected SKILL.md
+selected runtime. `agent_workflow` then invokes Codex with the selected SKILL.md
 and a generation-only task on the host. `logos_verify` explicitly invokes the
 LOGOS Python wrapper locally or inside Docker for annotation and verification.
 `skill_verify` validates the returned WP evidence without rerunning WP.
 AutoDeduct checks source hashes, annotation-only changes, the requested
 verification options, and complete nonzero proof goals. Saida/TriCera,
-ISP/Eva, and ISP coverage checking are not run. See [LLM mode](USAGE.md#llm-mode).
+ISP/Eva, and ISP coverage checking are not run. See [Agent mode](USAGE.md#agent-mode).
+
+With `autodeduct acta`, one `acta_verify` stage invokes AcTa to generate a
+harness, run CBMC, and write `acta-report.json`. AutoDeduct imports that report;
+AcTa owns CBMC execution and evidence interpretation. Host Docker execution
+adds `acta_image` to resolve the installed verifier image to an immutable ID.
+See [AcTa/CBMC mode](ACTA.md).
 
 ## Status Model
 
@@ -65,11 +71,18 @@ In deductive mode, AutoDeduct returns exit code `0` only when:
 4. ISP reports no reachable helper function with a missing contract; and
 5. WP reports proof goals and proves all of them.
 
-In LLM mode, the host skill must return source-matched contract JSON, and the
+In Agent mode, the host skill must return source-matched contract JSON, and the
 LOGOS wrapper must finish with annotation-only output and a verifier report
 with all requested
 options and complete nonzero WP goals. The result does not include the
 deductive mode's reachable-helper coverage guarantee.
+
+In AcTa mode, AcTa must exit zero and provide a supported `passed` report
+matching the requested entry and loop bound. AutoDeduct imports its property
+counts and failing property names into `cbmc_report`, which is `null` if no
+usable verification summary was produced. AcTa owns the CBMC success checks
+and unwinding assertions. These are bounded results under the harness's
+preconditions and initialization model.
 
 A command exiting successfully is not enough by itself. AutoDeduct validates
 the generated artifacts, machine-readable contract report, and WP goal count.

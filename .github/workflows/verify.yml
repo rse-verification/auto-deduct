@@ -6,6 +6,7 @@ on:
       - "Dockerfiles/**"
       - "bin/**"
       - "examples/ase-2024/**"
+      - "examples/acta/**"
       - "tests/**"
       - ".github/workflows/verify.yml"
   push:
@@ -15,6 +16,7 @@ on:
       - "Dockerfiles/**"
       - "bin/**"
       - "examples/ase-2024/**"
+      - "examples/acta/**"
       - "tests/**"
       - ".github/workflows/verify.yml"
   workflow_dispatch:
@@ -29,17 +31,25 @@ concurrency:
 jobs:
   unit:
     runs-on: ubuntu-24.04
+    outputs:
+      acta_access: ${{ steps.acta_access.outputs.available }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: Check private dependency access
+        id: acta_access
+        env:
+          ACTA_TOKEN_AVAILABLE: ${{ secrets.ACTA_GITHUB_TOKEN != '' }}
+        run: echo "available=$ACTA_TOKEN_AVAILABLE" >> "$GITHUB_OUTPUT"
       - name: Run unit tests
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
-  public-regression-matrix:
-    name: Public regression matrix
+  toolchain-regression-matrix:
+    name: Toolchain regression matrix
     needs: unit
+    if: needs.unit.outputs.acta_access == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -55,7 +65,8 @@ jobs:
           load: true
           tags: auto-deduct:ci
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          secrets: |
+            github_token=${{ secrets.ACTA_GITHUB_TOKEN }}
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -73,3 +84,14 @@ jobs:
         env:
           AUTODEDUCT_RUN_LOGOS_DOCKER: "1"
         run: python -m unittest discover -s tests -p "test_logos_integration.py" -v
+      - name: Run host AcTa and CBMC integration
+        env:
+          AUTODEDUCT_RUN_ACTA_DOCKER: "1"
+        run: python -m unittest discover -s tests -p "test_acta_integration.py" -v
+      - name: Run local AcTa workflow inside the verifier image
+        run: >-
+          docker run --rm --network none
+          -v "$PWD:/work:ro" -w /work
+          -e AUTODEDUCT_RUN_ACTA_LOCAL=1
+          auto-deduct:ci
+          python3 -m unittest discover -s tests -p test_acta_integration.py -v

@@ -25,16 +25,19 @@ This is a living document describing the target for each AutoDeduct release.
 
 ## AutoDeduct V2 “Double Ducks” — release candidate
 
-- Add explicit `deductive` and `llm` mode commands while keeping existing flags.
+- Add explicit `deductive` and `agent` mode commands while keeping existing flags.
 - Use host Codex/LOGOS for contract generation, followed by launcher-owned
   annotation and WP evidence validation.
 - Offer local verification and optional Docker verification without container
   Codex or model credentials in the verifier image.
+- Add `autodeduct acta` using [AcTa](https://github.com/rse-verification/AcTa)
+  to generate a harness from an existing entry contract, run CBMC, and import
+  its verification report, with local and Docker execution supported.
 - Keep setup, mode-specific usage, common CLI reference and limitations in
   separate [documentation guides](docs/README.md).
 
 Complete native host verification and native Windows Frama-C qualification
-remain open. The LLM workflow remains experimental and does not provide the
+remain open. The Agent workflow remains experimental and does not provide the
 traditional ISP helper-coverage check.
 Its C/ACSL feature coverage and contract-generation reliability remain under
 investigation; see the [mode-specific limitations](docs/LIMITATIONS.md).

@@ -222,7 +222,7 @@ RUN ln -s /home/dev/repos/tricera/tri && \
 ##
 # Stage 5 - Add AutoDeduct Frama-C plugins and CLI
 #
-# The CLI selects the deductive or LLM workflow at runtime.
+# The CLI selects the deductive, Agent or AcTa workflow at runtime.
 #
 FROM auto-deduct-tricera AS auto-deduct-runtime
 
@@ -297,7 +297,7 @@ RUN : "${LOGOS_REPO:?LOGOS_REPO must not be empty}" && \
   git -C /tmp/logos rev-parse HEAD > /opt/logos/REVISION && \
   rm -rf /tmp/logos
 
-ENV AUTODEDUCT_LLM_SKILL=/opt/logos/skill/SKILL.md
+ENV AUTODEDUCT_AGENT_SKILL=/opt/logos/skill/SKILL.md
 ENV AUTODEDUCT_CONTAINER=1
 # The host UID may have no passwd entry; keep Why3's configured prover location.
 ENV HOME=/home/dev
@@ -306,5 +306,61 @@ USER dev
 RUN PYTHONPATH=/opt/logos/skill/scripts python3 -c \
       'from acsl_tool.parser import extract_functions; assert extract_functions("static inline int helper(void) { return 1; }")[0].name == "helper"' && \
     python3 /opt/logos/skill/scripts/generate_acsl.py --check-dependencies
+
+WORKDIR /home/dev
+
+##
+# Stage 7 - Install AcTa and CBMC in the standard image
+#
+FROM auto-deduct-logos AS auto-deduct
+
+ARG FRAMA_C_VER
+ARG ACTA_REPO="https://github.com/rse-verification/AcTa.git"
+ARG ACTA_VER="46c5b15807c204736cd08588d0fb5bd02b0a0d2c"
+ARG CBMC_VER="6.11.0"
+ARG CBMC_SHA256_AMD64="b3721aa541038384d7801ea3aeabbcddc3e8845ac8f1cbff637cf8dec7481ac8"
+ARG CBMC_SHA256_ARM64="9eb8f41a7dcda8eac6338b8367d77831431f767691e4535209925bd85e315ae7"
+LABEL org.opencontainers.image.cbmc.version="${CBMC_VER}"
+
+USER root
+# Install the official package with a pinned digest for each supported platform.
+RUN case "$(dpkg --print-architecture)" in \
+    amd64) package="ubuntu-24.04-cbmc-${CBMC_VER}-Linux.deb"; checksum="${CBMC_SHA256_AMD64}" ;; \
+    arm64) package="ubuntu-24.04-arm64-cbmc-${CBMC_VER}-Linux.deb"; checksum="${CBMC_SHA256_ARM64}" ;; \
+    *) echo "No pinned CBMC package for this architecture" >&2; exit 1 ;; \
+  esac && \
+  curl --fail --location --retry 3 -o /tmp/cbmc.deb \
+    "https://github.com/diffblue/cbmc/releases/download/cbmc-${CBMC_VER}/${package}" && \
+  echo "${checksum}  /tmp/cbmc.deb" | sha256sum --check --strict && \
+  apt-get update && \
+  apt-get install --yes --no-install-recommends /tmp/cbmc.deb gcc && \
+  rm -rf /tmp/cbmc.deb /var/lib/apt/lists/* && \
+  mkdir -p /opt/acta && chown dev:dev /opt/acta
+
+COPY --chmod=0755 Dockerfiles/github-askpass /tmp/github-askpass
+USER dev
+WORKDIR /home/dev/repos
+RUN --mount=type=secret,id=github_token,mode=0444 \
+  : "${ACTA_REPO:?ACTA_REPO must not be empty}" && \
+  : "${ACTA_VER:?ACTA_VER must not be empty}" && \
+  if [ -s /run/secrets/github_token ]; then export GIT_ASKPASS=/tmp/github-askpass; fi && \
+  GIT_TERMINAL_PROMPT=0 git clone --depth 1 --no-checkout "${ACTA_REPO}" acta && \
+  cd acta && \
+  GIT_TERMINAL_PROMPT=0 git fetch --depth 1 origin "${ACTA_VER}" && \
+  git checkout --detach FETCH_HEAD && \
+  git rev-parse HEAD > REVISION
+
+# Keep Frama-C fixed while checking AcTa dependencies; never downgrade it to 31.
+# ACTA_VER must select a report-enabled revision compatible with Frama-C 33.
+RUN : "${FRAMA_C_VER:?FRAMA_C_VER must not be empty}" && \
+  eval "$(opam env --switch=default --set-switch)" && \
+  cd /home/dev/repos/acta && \
+  opam install --deps-only . "frama-c.${FRAMA_C_VER}" --yes && \
+  dune build @install && \
+  dune install && \
+  cp REVISION LICENSE /opt/acta/ && \
+  frama-c -acta-help && cbmc --version && \
+  opam clean --logs --download-cache --yes && \
+  rm -rf /home/dev/repos/acta
 
 WORKDIR /home/dev

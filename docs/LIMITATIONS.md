@@ -1,19 +1,21 @@
 # AutoDeduct limitations
 
-[Documentation index](README.md) · [Deductive mode](DEDUCTIVE.md) · [LLM mode](LLM.md)
+[Documentation index](README.md) · [Deductive mode](DEDUCTIVE.md) · [Agent mode](AGENT.md)
 
 The Saida/TriCera/ISP inference limitations below apply to **deductive mode**.
-LLM mode uses LOGOS and WP instead; its C/ACSL feature coverage and
+Agent mode uses LOGOS and WP instead; its C/ACSL feature coverage and
 contract-generation reliability are **under investigation**. A feature that
-fails deductive inference is not automatically supported by LLM mode.
+fails deductive inference is not automatically supported by Agent mode.
 
-Both workflows require review of the supplied specifications and assumptions.
+All workflows require review of the supplied specifications and assumptions.
 AutoDeduct writes generated artifacts separately from the original source.
+AcTa/CBMC uses bounded model checking with its own
+[contract subset and initialization limits](ACTA.md#results-and-limits).
 
 ## Shared input requirements
 
-Both modes currently accept one C translation unit plus its headers. The
-launcher rejects multiple `.c` inputs before either workflow starts. Generated
+All modes currently accept one C translation unit plus its headers. The
+launcher rejects multiple `.c` inputs before the selected workflow starts. Generated
 output must be separate from the selected source and input files.
 
 ## Deductive inference boundaries
@@ -60,7 +62,9 @@ Missing contracts on functions ISP considers reachable fail the
 `contract_check` stage. A contract that exists but is too weak may instead
 appear as unresolved WP goals.
 
-## Interpreting success in both modes
+## Interpreting WP success
+
+This section applies to the deductive and Agent workflows.
 
 A successful command is evidence for the selected input, entry point, tool
 versions, and generated proof obligations. It is not evidence that all C or
@@ -75,10 +79,10 @@ When qualifying a new program, retain `report.json` and the named stage logs.
 The public regression sources under `tests/cases/` document the expected
 outcomes exercised by the repository's integration suite.
 
-## LLM mode: coverage under investigation
+## Agent mode: coverage under investigation
 
-LLM mode is experimental. The deductive feature table above is not a support
-matrix for LLM mode: coverage of floating point, pointer arithmetic, nested
+Agent mode is experimental. The deductive feature table above is not a support
+matrix for Agent mode: coverage of floating point, pointer arithmetic, nested
 pointers and aggregates, persistent static state, loops and richer ACSL has
 not been systematically qualified. Contract quality and repeatability also
 remain under investigation. Check the generated contracts and actual WP
@@ -96,4 +100,4 @@ The following are known restrictions of the current implementation:
 - Codex inside Docker is unsupported. Docker verification is selected explicitly;
   without Docker the complete local verification dependencies are required.
 
-See [LLM usage](LLM.md) for runtime dependencies, reports and troubleshooting.
+See [Agent usage](AGENT.md) for runtime dependencies, reports and troubleshooting.

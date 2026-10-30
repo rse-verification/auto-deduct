@@ -1,8 +1,8 @@
-# LLM setup and usage
+# Agent setup and usage
 
 [Documentation index](README.md) · [Host launcher](INSTALLATION.md#host-launcher) · [Common CLI options](USAGE.md)
 
-LLM mode uses authenticated Codex on the host to author function contracts using
+Agent mode uses authenticated Codex on the host to author function contracts using
 [LOGOS](https://github.com/rse-verification/logos). AutoDeduct then explicitly
 runs the LOGOS Python wrapper to insert contracts and run Frama-C WP.
 
@@ -16,15 +16,15 @@ runs the LOGOS Python wrapper to insert contracts and run Frama-C WP.
 | Host libclang and Frama-C/WP/provers | Required | Supplied by verifier image |
 | Docker and prepared LOGOS verifier image | Unused | Required |
 
-`local` is the default. Docker is never started just by selecting LLM mode.
+`local` is the default. Docker is never started just by selecting Agent mode.
 Both runtimes need the [host launcher](INSTALLATION.md#host-launcher): use
 `./bin/autodeduct` from the checkout or put `bin/` on `PATH`. A separate
 AutoDeduct package installation is unnecessary.
 
 ## Set up the host agent
 
-Use the [Windows/WSL 2, Ubuntu or macOS quickstart](../README.md#llm-docker-quickstart-by-operating-system)
-for platform setup and a complete Docker example. Windows LLM Docker commands
+Use the [Windows/WSL 2, Ubuntu or macOS quickstart](AGENT_DOCKER_QUICKSTART.md)
+for platform setup and a complete Docker example. Windows Agent Docker commands
 run in WSL 2, with Python and Codex installed inside that distribution.
 
 Install [Codex CLI](https://learn.chatgpt.com/docs/cli) on the host and sign in:
@@ -46,13 +46,13 @@ For local verification, clone LOGOS from its public repository:
 ```shell
 git clone https://github.com/rse-verification/logos.git ../logos
 git -C ../logos checkout cea177911b6ad5176122b4b3c415f92897c464d2
-export AUTODEDUCT_LLM_SKILL="$(cd ../logos && pwd)/skill/SKILL.md"
+export AUTODEDUCT_AGENT_SKILL="$(cd ../logos && pwd)/skill/SKILL.md"
 ```
 
 This revision is on LOGOS's `main` branch and supports the
 `generate-only` task, dependency preflight, and verifier evidence interface.
 No global skill registration is necessary. Keep the skill and
-runner files outside the selected proof output directory. `--llm-skill PATH`
+runner files outside the selected proof output directory. `--agent-skill PATH`
 can replace the environment variable. These settings apply only to `local`.
 
 Follow [LOGOS setup](https://github.com/rse-verification/logos/blob/main/docs/SETUP.md)
@@ -64,17 +64,19 @@ is unvalidated. Use WSL for a Linux verification toolchain.
 Run with local verification:
 
 ```shell
-autodeduct llm --llm-runtime local --timeout 1200 \
-  --output-dir /tmp/llm-local-proof --wp-rte path/to/program.c
+autodeduct agent --agent-runtime local --timeout 1200 \
+  --output-dir /tmp/agent-local-proof --wp-rte path/to/program.c
 ```
 
 ## Build the verifier image
 
 Run these commands **on the host, from the AutoDeduct checkout** after starting
-Docker. The standard image includes LOGOS, Saida, ISP and TriCera:
+Docker. The standard image includes LOGOS, Saida, ISP, TriCera, AcTa and CBMC.
+Prepare the [GitHub build credentials](INSTALLATION.md#github-access-for-image-builds)
+and use the shared [Frama-C 33 setup](ACTA.md#frama-c-33-compatibility):
 
 ```shell
-docker build \
+docker build --secret id=github_token,env=GH_TOKEN \
   -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
 ```
 
@@ -95,19 +97,19 @@ Run on the host with the host launcher, authenticated Codex, Docker and the
 prepared image available locally:
 
 ```shell
-autodeduct llm --llm-runtime docker --timeout 1200 \
-  --llm-docker-image auto-deduct:latest \
-  --output-dir /tmp/llm-docker-proof --wp-rte path/to/program.c
+autodeduct agent --agent-runtime docker --timeout 1200 \
+  --agent-docker-image auto-deduct:latest \
+  --output-dir /tmp/agent-docker-proof --wp-rte path/to/program.c
 ```
 
 The verifier image contains Python, libclang, LOGOS, Frama-C/WP and provers.
-`--llm-docker-image` defaults to the standard `auto-deduct:latest` image.
+`--agent-docker-image` defaults to the standard `auto-deduct:latest` image.
 AutoDeduct resolves its tag to an immutable image ID and extracts
 `/opt/logos/skill/SKILL.md` into a temporary host folder outside the agent's
 output workspace. Codex reads that copy; the wrapper runs from the same image
-ID. No local LOGOS checkout, `--llm-skill` flag, or host wrapper installation is
+ID. No local LOGOS checkout, `--agent-skill` flag, or host wrapper installation is
 required. Docker mode always uses the image's skill, even if
-`AUTODEDUCT_LLM_SKILL` or `--llm-skill` is set.
+`AUTODEDUCT_AGENT_SKILL` or `--agent-skill` is set.
 
 It contains no Codex installation or model login. Source/header directories are
 mounted read-only at the same absolute paths, and the output folder is writable
@@ -117,11 +119,11 @@ are unnecessary. AutoDeduct runs extraction and dependency checks before Codex,
 and annotation/verification after generation. Codex does not launch Docker.
 
 The temporary skill folder is removed when the workflow ends. The run keeps
-`llm-skill.md` for review, and `llm-task.json` records its hash and the image ID.
+`agent-skill.md` for review, and `agent-task.json` records its hash and the image ID.
 The temporary `skill` path recorded in that task is no longer present afterwards.
 
-Use `--llm-docker-image IMAGE` for a compatible alternate image and
-`--llm-docker-platform PLATFORM` for its platform. Docker Desktop must permit
+Use `--agent-docker-image IMAGE` for a compatible alternate image and
+`--agent-docker-platform PLATFORM` for its platform. Docker Desktop must permit
 sharing the selected directories. Docker mode uses POSIX paths; on Windows use
 WSL. Mount paths containing commas or newlines are unsupported. Extra resources
 referenced through raw Frama-C options must be under source/`--include` roots.
@@ -135,17 +137,17 @@ limit does not make a failed proof successful by itself.
 
 The launcher uses an image already available in the local Docker daemon. It
 does not build or pull images automatically. Build or load the image first,
-then pass the same name and tag with `--llm-docker-image`:
+then pass the same name and tag with `--agent-docker-image`:
 
 ```shell
 # From the AutoDeduct checkout; on Apple Silicon add --platform linux/amd64.
-docker build -t my-autodeduct:llm \
+docker build --secret id=github_token,env=GH_TOKEN -t my-autodeduct:agent \
   -f Dockerfiles/AutoDeductDockerfile .
 
-autodeduct llm --llm-runtime docker \
-  --llm-docker-image my-autodeduct:llm \
+autodeduct agent --agent-runtime docker \
+  --agent-docker-image my-autodeduct:agent \
   --timeout 1200 --wp-rte \
-  --output-dir /tmp/llm-docker-proof path/to/program.c
+  --output-dir /tmp/agent-docker-proof path/to/program.c
 ```
 
 Without this option, the launcher selects `auto-deduct:latest`. An image ID is
@@ -154,25 +156,25 @@ also accepted. The selected image must contain LOGOS and its verifier toolchain.
 ## Why Codex stays on the host
 
 Running Codex inside Docker is unsupported and AutoDeduct rejects container
-LLM launches. Earlier experiments failed during namespace/seccomp sandbox
+Agent launches. Earlier experiments failed during namespace/seccomp sandbox
 initialization; container login also needs separate setup. The host launcher
 uses the existing Codex login and coordinates generation and verification
 through files. See the official [sandbox guidance](https://learn.chatgpt.com/docs/agent-approvals-security).
 
 The traditional [deductive workflow](DEDUCTIVE.md) can still run entirely inside
-Docker. That arrangement does not start an LLM agent.
+Docker. That arrangement does not start a contract-generation agent.
 
 ## Contract and report handoff
 
 1. AutoDeduct selects the local skill, or resolves the Docker image and extracts
    its skill. It checks verification dependencies before calling the model.
-2. It writes `llm-task.json` with `workflow: "generate-only"`, source and output
+2. It writes `agent-task.json` with `workflow: "generate-only"`, source and output
    paths, and requested verification arguments.
-3. Codex reads the skill/source and writes `llm-contracts.json` with structured
+3. Codex reads the skill/source and writes `agent-contracts.json` with structured
    ACSL contracts and a matching source hash, then exits.
 4. AutoDeduct validates the contract bundle, invokes the LOGOS wrapper, and
    retains annotated `inferred.c` and text/PDF reports.
-5. The wrapper produces `llm-verification.json` from the actual Frama-C process.
+5. The wrapper produces `agent-verification.json` from the actual Frama-C process.
    AutoDeduct checks the annotated-source hash, unchanged input/specifications,
    exact verification arguments, exit code and complete nonzero WP summary,
    then writes its own `report.json`.
@@ -182,13 +184,13 @@ for human review. The model's final prose is not proof evidence.
 
 | Artifact | Owner and purpose |
 | --- | --- |
-| `llm-task.json` | AutoDeduct generation request, skill hash and Docker image ID |
-| `llm-skill.md` | Docker skill snapshot; the temporary host copy is removed |
-| `llm-contracts.json` | Host agent's contracts with source hash |
+| `agent-task.json` | AutoDeduct generation request, skill hash and Docker image ID |
+| `agent-skill.md` | Docker skill snapshot; the temporary host copy is removed |
+| `agent-contracts.json` | Host agent's contracts with source hash |
 | `inferred.c` | LOGOS annotated source |
-| `llm-verification.json` | LOGOS process evidence |
+| `agent-verification.json` | LOGOS process evidence |
 | `inferred.wp-report.txt` / `.pdf` | LOGOS human-readable reports |
-| Stage logs and `llm-final.txt` | Image/skill setup, dependency, generation and verification diagnostics |
+| Stage logs and `agent-final.txt` | Image/skill setup, dependency, generation and verification diagnostics |
 | `report.json` | AutoDeduct's final acceptance decision |
 
 Evidence schema version 1 contains the command, process `returncode`,
@@ -199,7 +201,7 @@ is trusted software; these reports are not cryptographically certified proofs.
 
 ## Codex configuration
 
-The default is `codex exec`. `--llm-runner COMMAND` or `AUTODEDUCT_LLM_RUNNER`
+The default is `codex exec`. `--agent-runner COMMAND` or `AUTODEDUCT_AGENT_RUNNER`
 can select a Codex profile. The command receives Codex-specific arguments;
 other agents and direct APIs need an adapter. Commands execute without a shell;
 script paths must be absolute. Do not put credentials in the command because
@@ -227,9 +229,9 @@ and this mode provides no ISP helper-coverage guarantee. Project-specific
 include/macro options are forwarded to verification, not to libclang's annotation
 parser. Native end-to-end host verification remains unqualified in this branch;
 Docker verification has been checked with real WP. Proof success is relative
-to the supplied contracts and assumptions, not proof that the LLM captured all
-intended requirements. LLM feature coverage and generation reliability remain
-under investigation; see [LLM limitations](LIMITATIONS.md#llm-mode-coverage-under-investigation).
+to the supplied contracts and assumptions, not proof that the Agent captured all
+intended requirements. Agent feature coverage and generation reliability remain
+under investigation; see [Agent limitations](LIMITATIONS.md#agent-mode-coverage-under-investigation).
 
 ## Offline integration check
 

@@ -8,7 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 
-task = json.loads(Path("llm-task.json").read_text())
+task = json.loads(Path("agent-task.json").read_text())
 source = Path(task["source"]).read_text(encoding="utf-8")
 Path(task["contracts"]).write_text(json.dumps({
     "format": "acsl-contracts-v2",

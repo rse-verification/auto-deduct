@@ -1,0 +1,7 @@
+#!/bin/sh
+# Read credentials from a BuildKit secret only; never put them in Git URLs.
+case "$1" in
+  *Username*) printf '%s\n' 'x-access-token' ;;
+  *Password*) cat /run/secrets/github_token ;;
+  *) exit 1 ;;
+esac
