@@ -28,8 +28,9 @@ checks AcTa's dependencies while keeping the shared Frama-C version fixed.
 
 Build or load the standard `auto-deduct:latest` image using the
 [installation guide](INSTALLATION.md#standard-docker-image). The build includes
-AcTa, CBMC and the shared Frama-C 33 installation. It currently requires GitHub
-read access to AcTa; see [build credentials](INSTALLATION.md#github-access-for-image-builds).
+AcTa, CBMC and the shared Frama-C 33 installation. Public AcTa access needs
+no token. If the selected source requires authentication, use the
+[optional build credentials](INSTALLATION.md#github-access-for-image-builds).
 Host Python 3.10+ and Docker are required. Use WSL 2 on Windows.
 
 Then run:
@@ -162,6 +163,7 @@ cover a correct contract, a counterexample, insufficient and sufficient loop
 unwinding, unsupported/missing contracts, headers, custom entry points, and
 paths containing spaces. No language-model calls are involved.
 
-CI builds the standard image and runs the toolchain checks when the repository
-secret `ACTA_GITHUB_TOKEN` has read access to AcTa. Without it, the image and
-toolchain checks are skipped; offline unit checks still run.
+CI builds the standard image and runs the toolchain checks when AcTa is
+anonymously accessible or the repository secret `ACTA_GITHUB_TOKEN` is
+available for authenticated access. If neither is available, only offline
+unit checks run. A public AcTa repository does not require a CI secret.

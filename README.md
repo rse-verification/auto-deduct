@@ -21,15 +21,16 @@ Agent mode runs Codex on the host in both cases.
 
 ## Quick start: deductive verification in Docker
 
-Requires Git, Docker running Linux containers, and a `GH_TOKEN` with read access
-to AcTa; see [build credentials](docs/INSTALLATION.md#github-access-for-image-builds).
+Requires Git, Docker running Linux containers, and access to the AcTa source
+repository. Public access needs no GitHub token. If authentication is required,
+see [optional build credentials](docs/INSTALLATION.md#github-access-for-image-builds).
 Use Bash/Zsh, or Ubuntu inside WSL 2 on Windows. The current standard toolchain targets `linux/amd64`.
 
 ```shell
 git clone https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
 
-docker build --secret id=github_token,env=GH_TOKEN --platform linux/amd64 \
+docker build --platform linux/amd64 \
   -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
 
 docker run --rm --platform linux/amd64 \

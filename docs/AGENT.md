@@ -72,11 +72,12 @@ autodeduct agent --agent-runtime local --timeout 1200 \
 
 Run these commands **on the host, from the AutoDeduct checkout** after starting
 Docker. The standard image includes LOGOS, Saida, ISP, TriCera, AcTa and CBMC.
-Prepare the [GitHub build credentials](INSTALLATION.md#github-access-for-image-builds)
-and use the shared [Frama-C 33 setup](ACTA.md#frama-c-33-compatibility):
+Use the shared [Frama-C 33 setup](ACTA.md#frama-c-33-compatibility).
+[Build credentials](INSTALLATION.md#github-access-for-image-builds) are optional
+and needed only when the selected AcTa repository requires authentication:
 
 ```shell
-docker build --secret id=github_token,env=GH_TOKEN \
+docker build \
   -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
 ```
 
@@ -141,7 +142,7 @@ then pass the same name and tag with `--agent-docker-image`:
 
 ```shell
 # From the AutoDeduct checkout; on Apple Silicon add --platform linux/amd64.
-docker build --secret id=github_token,env=GH_TOKEN -t my-autodeduct:agent \
+docker build -t my-autodeduct:agent \
   -f Dockerfiles/AutoDeductDockerfile .
 
 autodeduct agent --agent-runtime docker \

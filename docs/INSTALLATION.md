@@ -49,18 +49,22 @@ See [Agent setup](AGENT.md).
 
 ## GitHub access for image builds
 
-The standard image includes AcTa and CBMC alongside the other tools. AcTa is
-currently private, so building any standard image requires a GitHub token with
-read access to that repository. Set `GH_TOKEN` before the build; with an
-already authenticated GitHub CLI, one option is:
+The standard image fetches AcTa alongside the other tools. No GitHub token is
+needed when the selected repository is publicly accessible. If that repository
+or an `ACTA_REPO` fork requires authentication, supply a token with read access
+through the optional BuildKit secret:
 
 ```shell
 export GH_TOKEN="$(gh auth token)"
+docker build --secret id=github_token,env=GH_TOKEN \
+  -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
 ```
 
-The commands below pass it through a temporary BuildKit secret. It is not stored
-in build arguments, Git URLs or the image environment. For an accessible fork,
-set `ACTA_REPO` and `ACTA_VER` accordingly.
+This example assumes an authenticated GitHub CLI. The secret is not stored in
+build arguments, Git URLs or the image environment. Set `ACTA_REPO` and
+`ACTA_VER` to select an accessible fork and compatible revision. If a build
+reports repository-not-found or asks for GitHub credentials, check access to
+the exact repository selected by `ACTA_REPO`.
 
 ## Standard Docker image
 
@@ -72,7 +76,7 @@ Choose the workflow when running AutoDeduct; a second image build or host LOGOS 
 ```shell
 git clone https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
-docker build --secret id=github_token,env=GH_TOKEN \
+docker build \
   -t auto-deduct:v2-rc \
   -t auto-deduct:latest \
   -f Dockerfiles/AutoDeductDockerfile .
@@ -87,11 +91,10 @@ docker run --rm auto-deduct:latest python3 /opt/logos/skill/scripts/generate_acs
 ```
 
 The build fetches pinned component revisions directly from their repositories.
-No separate LOGOS or AcTa checkout is needed. Supply the GitHub build secret
-for private AcTa access as described above.
+No separate LOGOS or AcTa checkout is needed. Supply the optional GitHub build
+secret only when the selected AcTa source requires authentication.
 
-You may choose another image name with `docker build -t NAME:TAG`, keeping the
-same build secret. For Agent
+You may choose another image name with `docker build -t NAME:TAG`. For Agent
 Docker runs, select it with `--agent-docker-image NAME:TAG`; for deductive Docker
 runs, use it as the image argument to `docker run`. Agent mode defaults to
 `auto-deduct:latest` and never builds or pulls the selected image automatically.
@@ -103,7 +106,7 @@ The current TriCera stack uses the `linux/amd64` architecture. Add the
 platform to both build and run commands on an Apple Silicon Mac:
 
 ```shell
-docker build --secret id=github_token,env=GH_TOKEN --platform linux/amd64 \
+docker build --platform linux/amd64 \
   -t auto-deduct:latest \
   -f Dockerfiles/AutoDeductDockerfile .
 
@@ -135,7 +138,7 @@ AcTa adds `ACTA_REPO` and `ACTA_VER`. CBMC adds `CBMC_VER`,
 digests when changing its version.
 
 ```shell
-docker build --secret id=github_token,env=GH_TOKEN \
+docker build \
   --build-arg OCAML_VER=5.4.0 \
   --build-arg SAIDA_VER=<branch-tag-or-commit> \
   --build-arg TRICERA_VER=<branch-tag-or-commit> \
@@ -147,7 +150,7 @@ docker build --secret id=github_token,env=GH_TOKEN \
 For a fix hosted in a fork, set both its repository and ref:
 
 ```shell
-docker build --secret id=github_token,env=GH_TOKEN \
+docker build \
   --build-arg TRICERA_REPO=https://github.com/<user>/tricera.git \
   --build-arg TRICERA_VER=<branch-or-commit> \
   -t auto-deduct:component-test \
@@ -167,7 +170,7 @@ AcTa's resolved revision is stored in `/opt/acta/REVISION`.
 Only networks requiring an HTTP proxy need these optional arguments:
 
 ```shell
-docker build --secret id=github_token,env=GH_TOKEN \
+docker build \
   --build-arg PROXY_HOST=<proxy-host> \
   --build-arg PROXY_PORT=<proxy-port> \
   -t auto-deduct:latest \
