@@ -122,6 +122,12 @@ No rebuild is required to use this option. The image keeps `HOME=/home/dev`
 so the installed toolchain and configured provers remain discoverable even
 when your numeric UID has no named account in the image.
 
+For a host UID without a named account, the image's interactive Bash prompt
+uses `autodeduct` as its display label and retains the Git branch display.
+This label does not change the UID/GID used for file permissions. Rebuild an
+older image to include the prompt fallback, then start a new shell using the
+command above.
+
 The directory must also be writable by your host user; read-only mounts,
 host ACLs, or Docker Desktop sharing restrictions still apply. Select an
 output directory owned by you if an earlier run created inaccessible files

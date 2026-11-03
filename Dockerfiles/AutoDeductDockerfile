@@ -134,6 +134,13 @@ else
 fi
 EOF
 
+# A host UID supplied with --user may have no passwd entry in the image.
+RUN cat >> /home/dev/.bashrc <<'EOF'
+if ! id -un >/dev/null 2>&1; then
+    PROMPT_COMMAND='__git_ps1 "autodeduct@\h:\w" "\$ "'
+fi
+EOF
+
 ##
 # Stage 2 - Add Frama-C related stuff
 #
