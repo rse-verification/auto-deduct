@@ -23,12 +23,15 @@ also owns reachable-function and missing-contract semantics; AutoDeduct reads
 its JSON report rather than reimplementing the call graph.
 
 With `--mode agent --agent-runtime docker`, `logos_image` resolves the installed
-verifier image to an immutable ID, then `logos_skill` extracts its SKILL.md for
-the host agent. These two stages are unnecessary in local mode, which uses the
+verifier image to an immutable ID. `logos_container` starts one container for
+the run, then `logos_skill` extracts its SKILL.md for
+the host agent. These Docker setup stages are unnecessary in local mode, which uses the
 configured host skill. `logos_environment` checks wrapper dependencies for the
 selected runtime. `agent_workflow` then invokes Codex with the selected SKILL.md
 and a generation-only task on the host. `logos_verify` explicitly invokes the
-LOGOS Python wrapper locally or inside Docker for annotation and verification.
+LOGOS Python wrapper locally or via `docker exec` for annotation and verification.
+Docker skill extraction, dependency checks and verification reuse the same
+container; the launcher removes it when the workflow ends or is interrupted.
 `skill_verify` validates the returned WP evidence without rerunning WP.
 AutoDeduct checks source hashes, annotation-only changes, the requested
 verification options, and complete nonzero proof goals. Saida/TriCera,

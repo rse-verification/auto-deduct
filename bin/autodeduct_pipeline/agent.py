@@ -7,15 +7,17 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import sys
 import tempfile
+import threading
 import uuid
 from difflib import SequenceMatcher
 from pathlib import Path
 
 from .diagnostics import wp_diagnostic
-from .runtime import (docker_run_options, in_container, resolve_image,
-                      run_container_stage, validate_mount_path)
+from .runtime import (docker_run_options, in_container, remove_container,
+                      resolve_image, validate_mount_path)
 from .stages import PipelineError, SAIDA_OUTPUT, StageResult, command_options, run_stage, write_text
 
 
@@ -67,16 +69,20 @@ def validate_agent_options(args, output_dir):
 
 
 def wrapper_command(args, source, output_dir, contracts, annotated, evidence_file, options,
-                    *, check_dependencies=False):
+                    *, check_dependencies=False, container=None):
     wrapper_args = ["--check-dependencies"] if check_dependencies else [
                     str(source), "--contracts", str(contracts), "-o", str(annotated),
                     "--verify", "--verification-json", str(evidence_file),
                     *(f"--frama-c-option={value}" for value in options)]
     if args.agent_runtime == "local":
         wrapper = Path(args.agent_skill).expanduser().resolve().parent / "scripts/generate_acsl.py"
-        return [sys.executable, str(wrapper), *wrapper_args], None
-    name = f"autodeduct-logos-{uuid.uuid4().hex}"
-    command = docker_run_options(args.agent_docker_platform, name)
+        return [sys.executable, str(wrapper), *wrapper_args]
+    return ["docker", "exec", container, "python3",
+            "/opt/logos/skill/scripts/generate_acsl.py", *wrapper_args]
+
+
+def container_command(args, source, output_dir, name):
+    command = [*docker_run_options(args.agent_docker_platform, name), "--detach"]
     # Preserve absolute paths so verifier evidence matches the host task exactly.
     roots = {source.parent, *(Path(value).expanduser().resolve() for value in args.include)}
     for root in sorted(roots, key=str):
@@ -86,8 +92,8 @@ def wrapper_command(args, source, output_dir, contracts, annotated, evidence_fil
         command += ["--mount", f"type=bind,source={root},target={root},readonly"]
     command += ["--mount", f"type=bind,source={output_dir},target={output_dir}",
                 "--workdir", str(output_dir), args.agent_docker_image,
-                "python3", "/opt/logos/skill/scripts/generate_acsl.py", *wrapper_args]
-    return command, name
+                "python3", "-c", "import signal; signal.pause()"]
+    return command
 
 
 def validate_contracts(path, source_text):
@@ -140,11 +146,48 @@ def run_skill_workflow(args, source, output_dir, report):
     pinned_args = copy.copy(args)
     pinned_args.agent_docker_image = image_id
     name = f"autodeduct-logos-{uuid.uuid4().hex}"
-    extraction = run_container_stage(
+    command = container_command(pinned_args, source, output_dir, name)
+    cleanup_target = name
+    handle_termination = threading.current_thread() is threading.main_thread()
+    if handle_termination:
+        # Let SIGTERM unwind the workflow so the verifier is removed as on Ctrl-C.
+        previous_handler = signal.signal(signal.SIGTERM, _terminate_workflow)
+    try:
+        startup = run_stage(
+            name="logos_container", description="Start the run's LOGOS verifier container",
+            command=command, cwd=output_dir, output_dir=output_dir, timeout=args.timeout,
+        )
+        report.stages.append(startup)
+        if startup.status != "passed":
+            report.errors.append({"stage": startup.name, "message": startup.error or "could not start LOGOS container"})
+            return report
+        container = Path(startup.stdout_file).read_text(encoding="utf-8").strip()
+        if not re.fullmatch(r"[0-9a-f]{64}", container):
+            startup.status = "failed"
+            startup.error = "Docker did not return a valid container ID"
+            report.errors.append({"stage": startup.name, "message": startup.error})
+            return report
+        cleanup_target = container
+        return _run_container_workflow(pinned_args, source, output_dir, report, container)
+    finally:
+        try:
+            if not remove_container(cleanup_target, report):
+                report.status = "failed"
+        finally:
+            if handle_termination:
+                signal.signal(signal.SIGTERM, previous_handler)
+
+
+def _terminate_workflow(signum, frame):
+    raise SystemExit(128 + signum)
+
+
+def _run_container_workflow(args, source, output_dir, report, container):
+    extraction = run_stage(
         name="logos_skill", description="Extract the LOGOS skill from the pinned verifier image",
-        command=[*docker_run_options(args.agent_docker_platform, name), image_id, "python3", "-c",
+        command=["docker", "exec", container, "python3", "-c",
                  "from pathlib import Path; print(Path('/opt/logos/skill/SKILL.md').read_text(encoding='utf-8'), end='')"],
-        container_name=name, report=report, cwd=output_dir, output_dir=output_dir,
+        cwd=output_dir, output_dir=output_dir,
         timeout=args.timeout,
     )
     report.stages.append(extraction)
@@ -167,12 +210,12 @@ def run_skill_workflow(args, source, output_dir, report):
         write_text(skill, skill_text)
         skill.chmod(0o400)
         try:
-            return _run_skill_workflow(pinned_args, source, output_dir, report, skill)
+            return _run_skill_workflow(args, source, output_dir, report, skill, container=container)
         finally:
             write_text(snapshot, skill_text, expected_parent=output_identity)
 
 
-def _run_skill_workflow(args, source, output_dir, report, skill):
+def _run_skill_workflow(args, source, output_dir, report, skill, *, container=None):
     try:
         source_text = source.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as error:
@@ -190,27 +233,29 @@ def _run_skill_workflow(args, source, output_dir, report, skill):
     options = [*command_options(args, [source]), *args.wp_option]
     if args.wp_rte:
         options.append("-wp-rte")
-    environment_command, environment_container = wrapper_command(
+    environment_command = wrapper_command(
         args, source, output_dir, contracts, annotated, evidence_file, options,
-        check_dependencies=True,
+        check_dependencies=True, container=container,
     )
-    environment = run_container_stage(
+    environment = run_stage(
         name="logos_environment", description=f"Check LOGOS verification dependencies ({args.agent_runtime})",
         command=environment_command, cwd=output_dir, output_dir=output_dir,
-        timeout=args.timeout, container_name=environment_container, report=report,
+        timeout=args.timeout,
     )
     report.stages.append(environment)
     if environment.status != "passed":
         report.errors.append({"stage": "environment", "message": environment.error or "LOGOS verification dependencies are unavailable"})
         return report
-    command, container_name = wrapper_command(
+    command = wrapper_command(
         args, source, output_dir, contracts, annotated, evidence_file, options,
+        container=container,
     )
     task_file = output_dir / "agent-task.json"
     write_text(task_file, json.dumps({
         "workflow": "generate-only",
         "skill_sha256": skill_sha256,
         "docker_image_id": args.agent_docker_image if args.agent_runtime == "docker" else None,
+        "docker_container_id": container,
         "skill": str(skill), "source": str(source),
         "contracts": str(contracts), "annotated_source": str(annotated),
         "verification_json": str(evidence_file), "verification_options": options,
@@ -259,11 +304,10 @@ def _run_skill_workflow(args, source, output_dir, report, skill):
     except (OSError, ValueError) as error:
         report.errors.append({"stage": "agent_contracts", "message": str(error)})
         return report
-    wrapper = run_container_stage(
+    wrapper = run_stage(
         name="logos_verify", description=f"Annotate and verify with LOGOS ({args.agent_runtime})",
         command=command, cwd=output_dir, output_dir=output_dir,
         timeout=args.timeout, artifact=evidence_file,
-        container_name=container_name, report=report,
     )
     report.stages.append(wrapper)
     if wrapper.status != "passed" and not evidence_file.is_file():

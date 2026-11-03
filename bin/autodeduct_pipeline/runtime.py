@@ -35,13 +35,23 @@ def run_container_stage(*, container_name, report, **stage_options):
         return result
     finally:
         if container_name and (result is None or result.status != "passed"):
-            try:
-                completed = subprocess.run(["docker", "rm", "--force", container_name],
-                                           capture_output=True, timeout=10, check=False)
-                if completed.returncode and "No such container" not in completed.stderr.decode(errors="replace"):
-                    report.errors.append({"stage": "cleanup", "message": f"could not confirm cleanup of container {container_name}"})
-            except (OSError, subprocess.TimeoutExpired):
-                report.errors.append({"stage": "cleanup", "message": f"could not confirm cleanup of container {container_name}"})
+            remove_container(container_name, report)
+
+
+def remove_container(container_name, report):
+    """Remove the named verifier and report an unconfirmed cleanup."""
+    try:
+        completed = subprocess.run(["docker", "rm", "--force", container_name],
+                                   capture_output=True, timeout=10, check=False)
+        stderr = completed.stderr or b""
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        if completed.returncode == 0 or "No such container" in stderr:
+            return True
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    report.errors.append({"stage": "cleanup", "message": f"could not confirm cleanup of container {container_name}"})
+    return False
 
 
 def resolve_image(image, *, name, report, output_dir, timeout):
