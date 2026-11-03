@@ -100,6 +100,34 @@ runs, use it as the image argument to `docker run`. Agent mode defaults to
 `auto-deduct:latest` and never builds or pulls the selected image automatically.
 See the [custom image example](AGENT.md#choose-a-custom-image-name).
 
+## Mounted workspace permissions
+
+Bind mounts retain the host's numeric ownership. The image's default `dev`
+user has UID 2000, which may differ from your host user. For writable host
+workspaces, pass your host UID and GID when starting the container. From the
+checkout in Bash/Zsh, or Ubuntu inside WSL 2:
+
+```shell
+docker run -it --rm --platform linux/amd64 \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD:/work" -w /work \
+  auto-deduct:latest bash
+```
+
+Inside the container, `mkdir output` now runs with your host identity, so
+directories and private reports it creates belong to you on the host. The
+same `--user` option applies when invoking `autodeduct deductive` directly
+through `docker run`, as shown in the [deductive guide](DEDUCTIVE.md#run-in-docker).
+No rebuild is required to use this option. The image keeps `HOME=/home/dev`
+so the installed toolchain and configured provers remain discoverable even
+when your numeric UID has no named account in the image.
+
+The directory must also be writable by your host user; read-only mounts,
+host ACLs, or Docker Desktop sharing restrictions still apply. Select an
+output directory owned by you if an earlier run created inaccessible files
+under another UID. Agent and AcTa Docker launchers already pass the host
+UID/GID automatically.
+
 ## Apple Silicon
 
 The current TriCera stack uses the `linux/amd64` architecture. Add the
