@@ -102,65 +102,31 @@ See the [custom image example](AGENT.md#choose-a-custom-image-name).
 
 ## Mounted workspace permissions
 
-The image entrypoint matches the numeric owner of a mounted `/work` directory
-before starting your command. It creates a named account inside the container
-when needed, then drops to that UID/GID. From Bash/Zsh or Ubuntu inside WSL 2:
+For an interactive shell, run this from your project directory in Bash/Zsh or
+Ubuntu inside WSL 2:
 
 ```shell
 docker run -it --rm --platform linux/amd64 \
+  --user "$(id -u):$(id -g)" \
   -v "$PWD:/work" -w /work \
   auto-deduct:latest bash
 ```
 
-### What happens at startup
+`--user` selects your host user and group IDs so `mkdir output` can write to a
+workspace you own. The entrypoint uses `libnss-wrapper` to resolve missing
+user/group names, including for Bash's prompt. It writes temporary account files
+under `/tmp`; it does not change IDs, `/etc/passwd`, or mounted file ownership.
+Without `--user`, the image retains its `dev` account; it does not infer a user
+from the mount. Host permissions and read-only mounts still apply.
 
-1. The startup script reads the numeric user ID (UID) and group ID (GID) that
-   own `/work`. These are the IDs Docker exposes for your mounted host folder.
-2. It reuses an account with that UID, or creates a named account **inside this
-   container**. The name may differ from your host username. This gives Bash
-   a name to display instead of `I have no name!`.
-3. It starts your command with that UID/GID. Therefore, `mkdir output` has the
-   workspace owner's filesystem permissions, and creates a folder owned by
-   that identity on the host.
+For `--read-only` containers, provide writable temporary storage with
+`--tmpfs /tmp:rw,nosuid,size=256m`. Agent and AcTa launches already do this and
+select your host UID/GID. `HOME=/home/dev` keeps the configured tools and provers
+available; it does not grant write access to their installed files.
 
-Your host files are not recursively changed or made world-writable. The script
-changes ownership of the container's `/home/dev` directory itself, leaving its
-existing contents and installed toolchain files under their existing owners.
-It keeps `HOME=/home/dev` so tools can find the image's configuration, including
-the configured provers. If `/work` is absent, it selects the `dev` account.
-
-After starting the shell, check the identity and try a new directory:
-
-```shell
-id
-mkdir output
-ls -ld output
-```
-
-Choose another directory name if `output` already exists. This behavior still
-requires Docker runtime validation; shell syntax checks alone do not establish
-that the toolchain works under every host identity.
-
-### Update an existing image
-
-Build from the checkout containing this fix, then start a new container. Use
-a normal cached build; rebuilding the entire toolchain with `--no-cache` is
-unnecessary:
-
-```shell
-docker build --platform linux/amd64 \
-  -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
-```
-
-Existing containers keep their original startup configuration. The host
-workspace must itself be writable by its owner; read-only mounts and host ACLs
-still apply. An existing root-owned workspace is mapped to root; use a workspace
-owned by your normal user to run without root privileges.
-
-Explicit non-root `--user UID:GID` launches bypass automatic account setup;
-Agent and AcTa verifier containers already select the host UID/GID and support
-read-only container filesystems. For an administrative root shell, explicitly
-opt out with `--user 0:0 -e AUTODEDUCT_MATCH_WORKSPACE=0`.
+After updating the checkout, repeat the [standard image build](#standard-docker-image)
+and start a new container. Docker can reuse its cached toolchain layers;
+`--no-cache` is unnecessary.
 
 ## Apple Silicon
 

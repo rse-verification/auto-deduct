@@ -365,9 +365,12 @@ RUN : "${FRAMA_C_VER:?FRAMA_C_VER must not be empty}" && \
 
 WORKDIR /home/dev
 
-# Match a mounted /work before dropping privileges to its named owner.
+# Resolve arbitrary --user IDs without requiring root or changing file ownership.
 USER root
-RUN apt-get update && apt-get install --yes --no-install-recommends util-linux && \
+RUN apt-get update && apt-get install --yes --no-install-recommends libnss-wrapper && \
+    ln -s /usr/lib/*/libnss_wrapper.so /usr/local/lib/libnss_wrapper.so && \
     rm -rf /var/lib/apt/lists/*
 COPY --chmod=0755 Dockerfiles/entrypoint.sh /usr/local/bin/autodeduct-entrypoint
+USER dev
 ENTRYPOINT ["/usr/local/bin/autodeduct-entrypoint"]
+CMD ["/usr/bin/bash", "-l"]

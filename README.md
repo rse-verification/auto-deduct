@@ -47,7 +47,7 @@ provenance. For native installation, custom images or proxy settings, see
 
 For an interactive container shell, use the
 [mounted-workspace command](docs/INSTALLATION.md#mounted-workspace-permissions)
-which automatically uses the mounted workspace owner and a named account.
+to use your host UID/GID with a resolvable container username.
 
 For **Agent generation**, follow the
 [Windows/WSL 2, Ubuntu or macOS quickstart](docs/AGENT_DOCKER_QUICKSTART.md).
