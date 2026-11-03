@@ -134,13 +134,6 @@ else
 fi
 EOF
 
-# A host UID supplied with --user may have no passwd entry in the image.
-RUN cat >> /home/dev/.bashrc <<'EOF'
-if ! id -un >/dev/null 2>&1; then
-    PROMPT_COMMAND='__git_ps1 "autodeduct@\h:\w" "\$ "'
-fi
-EOF
-
 ##
 # Stage 2 - Add Frama-C related stuff
 #
@@ -371,3 +364,10 @@ RUN : "${FRAMA_C_VER:?FRAMA_C_VER must not be empty}" && \
   rm -rf /home/dev/repos/acta
 
 WORKDIR /home/dev
+
+# Match a mounted /work before dropping privileges to its named owner.
+USER root
+RUN apt-get update && apt-get install --yes --no-install-recommends util-linux && \
+    rm -rf /var/lib/apt/lists/*
+COPY --chmod=0755 Dockerfiles/entrypoint.sh /usr/local/bin/autodeduct-entrypoint
+ENTRYPOINT ["/usr/local/bin/autodeduct-entrypoint"]

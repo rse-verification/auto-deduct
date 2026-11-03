@@ -102,37 +102,31 @@ See the [custom image example](AGENT.md#choose-a-custom-image-name).
 
 ## Mounted workspace permissions
 
-Bind mounts retain the host's numeric ownership. The image's default `dev`
-user has UID 2000, which may differ from your host user. For writable host
-workspaces, pass your host UID and GID when starting the container. From the
-checkout in Bash/Zsh, or Ubuntu inside WSL 2:
+The image entrypoint matches the numeric owner of a mounted `/work` directory
+before starting your command. It creates a named account inside the container
+when needed, then drops to that UID/GID. From Bash/Zsh or Ubuntu inside WSL 2:
 
 ```shell
 docker run -it --rm --platform linux/amd64 \
-  --user "$(id -u):$(id -g)" \
   -v "$PWD:/work" -w /work \
   auto-deduct:latest bash
 ```
 
-Inside the container, `mkdir output` now runs with your host identity, so
-directories and private reports it creates belong to you on the host. The
-same `--user` option applies when invoking `autodeduct deductive` directly
-through `docker run`, as shown in the [deductive guide](DEDUCTIVE.md#run-in-docker).
-No rebuild is required to use this option. The image keeps `HOME=/home/dev`
-so the installed toolchain and configured provers remain discoverable even
-when your numeric UID has no named account in the image.
+Inside the container, `mkdir output` uses the workspace owner's permissions.
+Bash can resolve that user's name, so its prompt does not display
+`I have no name!`. The entrypoint leaves mounted files and installed toolchain
+ownership unchanged. `HOME=/home/dev` retains the configured tools and provers.
+With no `/work` directory, it uses the image's `dev` account.
 
-For a host UID without a named account, the image's interactive Bash prompt
-uses `autodeduct` as its display label and retains the Git branch display.
-This label does not change the UID/GID used for file permissions. Rebuild an
-older image to include the prompt fallback, then start a new shell using the
-command above.
+Rebuild older images and start a new container to get this behavior. The host
+workspace must itself be writable by its owner; read-only mounts and host ACLs
+still apply. An existing root-owned workspace is mapped to root; use a workspace
+owned by your normal user to run without root privileges.
 
-The directory must also be writable by your host user; read-only mounts,
-host ACLs, or Docker Desktop sharing restrictions still apply. Select an
-output directory owned by you if an earlier run created inaccessible files
-under another UID. Agent and AcTa Docker launchers already pass the host
-UID/GID automatically.
+Explicit non-root `--user UID:GID` launches bypass automatic account setup;
+Agent and AcTa verifier containers already select the host UID/GID and support
+read-only container filesystems. For an administrative root shell, explicitly
+opt out with `--user 0:0 -e AUTODEDUCT_MATCH_WORKSPACE=0`.
 
 ## Apple Silicon
 
