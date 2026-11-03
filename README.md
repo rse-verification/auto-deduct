@@ -45,6 +45,10 @@ Inspect `autodeduct-output/report.json` and the stage logs. The
 provenance. For native installation, custom images or proxy settings, see
 [Installation](docs/INSTALLATION.md).
 
+For an interactive container shell, use the
+[mounted-workspace command](docs/INSTALLATION.md#mounted-workspace-permissions)
+with your host UID/GID so generated files remain writable and readable by you.
+
 For **Agent generation**, follow the
 [Windows/WSL 2, Ubuntu or macOS quickstart](docs/AGENT_DOCKER_QUICKSTART.md).
 For **AcTa/CBMC**, follow the [local or Docker setup](docs/ACTA.md).
