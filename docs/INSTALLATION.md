@@ -112,13 +112,47 @@ docker run -it --rm --platform linux/amd64 \
   auto-deduct:latest bash
 ```
 
-Inside the container, `mkdir output` uses the workspace owner's permissions.
-Bash can resolve that user's name, so its prompt does not display
-`I have no name!`. The entrypoint leaves mounted files and installed toolchain
-ownership unchanged. `HOME=/home/dev` retains the configured tools and provers.
-With no `/work` directory, it uses the image's `dev` account.
+### What happens at startup
 
-Rebuild older images and start a new container to get this behavior. The host
+1. The startup script reads the numeric user ID (UID) and group ID (GID) that
+   own `/work`. These are the IDs Docker exposes for your mounted host folder.
+2. It reuses an account with that UID, or creates a named account **inside this
+   container**. The name may differ from your host username. This gives Bash
+   a name to display instead of `I have no name!`.
+3. It starts your command with that UID/GID. Therefore, `mkdir output` has the
+   workspace owner's filesystem permissions, and creates a folder owned by
+   that identity on the host.
+
+Your host files are not recursively changed or made world-writable. The script
+changes ownership of the container's `/home/dev` directory itself, leaving its
+existing contents and installed toolchain files under their existing owners.
+It keeps `HOME=/home/dev` so tools can find the image's configuration, including
+the configured provers. If `/work` is absent, it selects the `dev` account.
+
+After starting the shell, check the identity and try a new directory:
+
+```shell
+id
+mkdir output
+ls -ld output
+```
+
+Choose another directory name if `output` already exists. This behavior still
+requires Docker runtime validation; shell syntax checks alone do not establish
+that the toolchain works under every host identity.
+
+### Update an existing image
+
+Build from the checkout containing this fix, then start a new container. Use
+a normal cached build; rebuilding the entire toolchain with `--no-cache` is
+unnecessary:
+
+```shell
+docker build --platform linux/amd64 \
+  -t auto-deduct:latest -f Dockerfiles/AutoDeductDockerfile .
+```
+
+Existing containers keep their original startup configuration. The host
 workspace must itself be writable by its owner; read-only mounts and host ACLs
 still apply. An existing root-owned workspace is mapped to root; use a workspace
 owned by your normal user to run without root privileges.
