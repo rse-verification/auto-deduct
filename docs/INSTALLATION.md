@@ -10,7 +10,7 @@ Choose a setup before running a command:
 | Deductive locally | Install the [native toolchain](#native-installation) and host launcher |
 | Agent locally | Install the [host launcher](#host-launcher), then follow [Agent local setup](AGENT.md#local-verification-dependencies) |
 | Agent with Docker verification | Install the host launcher, then follow [Agent Docker setup](AGENT.md#build-the-verifier-image) |
-| AcTa/CBMC locally or with Docker | Follow [AcTa setup](ACTA.md); its optional image target supplies both tools for Docker execution |
+| AcTa/CBMC locally or with Docker | Follow [AcTa setup](ACTA.md); the standard Docker image includes AcTa and CBMC |
 
 ## Host launcher
 
@@ -68,16 +68,17 @@ the exact repository selected by `ACTA_REPO`.
 
 ## Standard Docker image
 
-Clone the repository and build from its root. The root is required because
-the Dockerfile copies the CLI from `bin/`. The standard image includes
+Run these commands in your **host terminal**, with Docker running Linux
+containers. Use Bash/Zsh on Ubuntu or macOS, or Ubuntu inside WSL 2 on Windows.
+If you already cloned AutoDeduct, enter that checkout and run only the build
+command. Build from the repository root because the Dockerfile copies `bin/`. The standard image includes
 Saida, ISP, TriCera, Frama-C 33/WP, LOGOS, libclang, AcTa and CBMC.
 Choose the workflow when running AutoDeduct; a second image build or host LOGOS checkout is unnecessary.
 
 ```shell
 git clone https://github.com/rse-verification/auto-deduct.git
 cd auto-deduct
-docker build \
-  -t auto-deduct:v2-rc \
+docker build --platform linux/amd64 \
   -t auto-deduct:latest \
   -f Dockerfiles/AutoDeductDockerfile .
 ```
@@ -85,9 +86,9 @@ docker build \
 Verify the image:
 
 ```shell
-docker run --rm auto-deduct:latest autodeduct --version
-docker run --rm auto-deduct:latest autodeduct --help
-docker run --rm auto-deduct:latest python3 /opt/logos/skill/scripts/generate_acsl.py --check-dependencies
+docker run --rm --platform linux/amd64 auto-deduct:latest autodeduct --version
+docker run --rm --platform linux/amd64 auto-deduct:latest autodeduct --help
+docker run --rm --platform linux/amd64 auto-deduct:latest python3 /opt/logos/skill/scripts/generate_acsl.py --check-dependencies
 ```
 
 The build fetches pinned component revisions directly from their repositories.
@@ -102,8 +103,10 @@ See the [custom image example](AGENT.md#choose-a-custom-image-name).
 
 ## Mounted workspace permissions
 
-For an interactive shell, run this from your project directory in Bash/Zsh or
-Ubuntu inside WSL 2:
+### Optional: open a shell inside the container
+
+After building the image, run this in your **host terminal**, from the project
+folder you want to work on:
 
 ```shell
 docker run -it --rm --platform linux/amd64 \
@@ -112,23 +115,34 @@ docker run -it --rm --platform linux/amd64 \
   auto-deduct:latest bash
 ```
 
-`--user` selects your host user and group IDs so `mkdir output` can write to a
-workspace you own. The entrypoint uses `libnss-wrapper` to resolve missing
-user/group names, including for Bash's prompt. It writes temporary account files
-under `/tmp`; it does not change IDs, `/etc/passwd`, or mounted file ownership.
-Without `--user`, the image retains its `dev` account; it does not infer a user
-from the mount. Host permissions and read-only mounts still apply.
+Your host project folder appears as `/work` inside the container. Keep `--user`
+so commands use your host user and group IDs when accessing that folder.
+The image supplies a container username for Bash to display.
 
-For name lookup in `--read-only` containers, add
-`--tmpfs /tmp:rw,nosuid,size=256m`. Without writable `/tmp`, commands still run
-but missing account names remain unresolved. Agent and AcTa launches already
-provide temporary storage and select your host UID/GID. `HOME=/home/dev` keeps
-the configured tools and provers available; it does not grant write access to
-their installed files.
+You are now inside the container. Try `mkdir output` (choose another name if
+it exists), then use `exit` to return to your host terminal. Files created under
+`/work` remain in your host project folder after the container exits.
 
-After updating the checkout, repeat the [standard image build](#standard-docker-image)
-and start a new container. Docker can reuse its cached toolchain layers;
-`--no-cache` is unnecessary.
+Opening a shell is optional: the [deductive command](DEDUCTIVE.md#run-in-docker)
+runs verification directly. Agent and AcTa Docker launchers set the user and
+temporary-storage options automatically.
+
+### Update an existing image
+
+After updating your checkout, rerun the build command above **on the host** and
+start a new container. Docker reuses cached layers; `--no-cache` is unnecessary.
+
+<details>
+<summary>Custom Docker commands and read-only containers</summary>
+
+Without `--user`, the image uses its `dev` account, which may lack permission to
+write your host folder. Host permissions and read-only mounts still apply.
+For username lookup with `--read-only`, add `--tmpfs /tmp:rw,nosuid,size=256m`.
+Without writable `/tmp`, commands run with numeric IDs but missing usernames
+remain unresolved. The entrypoint uses `libnss-wrapper` and temporary account
+files; it does not change process IDs or mounted file ownership.
+
+</details>
 
 ## Apple Silicon
 

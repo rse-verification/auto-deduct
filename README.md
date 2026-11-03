@@ -45,9 +45,9 @@ Inspect `autodeduct-output/report.json` and the stage logs. The
 provenance. For native installation, custom images or proxy settings, see
 [Installation](docs/INSTALLATION.md).
 
-For an interactive container shell, use the
-[mounted-workspace command](docs/INSTALLATION.md#mounted-workspace-permissions)
-to use your host UID/GID with a resolvable container username.
+To work interactively inside the container, follow
+[Open a shell](docs/INSTALLATION.md#optional-open-a-shell-inside-the-container).
+This is optional; the command above runs verification directly.
 
 For **Agent generation**, follow the
 [Windows/WSL 2, Ubuntu or macOS quickstart](docs/AGENT_DOCKER_QUICKSTART.md).
