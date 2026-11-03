@@ -66,6 +66,11 @@ class WorkspacePermissionsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "0")
 
+    def test_readonly_command_without_tmpfs_still_runs(self):
+        result = self.container(["id", "-u"], options=("--read-only", "--user", "34567:45678"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "34567")
+
     def test_host_user_can_write_bind_mount_with_resolvable_username(self):
         with tempfile.TemporaryDirectory(prefix="autodeduct-bind-test-") as temp:
             workspace = Path(temp)

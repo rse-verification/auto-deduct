@@ -4,7 +4,8 @@ set -eu
 # Docker --user selects permissions; NSS supplies names for arbitrary numeric IDs.
 uid=$(id -u)
 gid=$(id -g)
-if ! getent passwd "$uid" >/dev/null || ! getent group "$gid" >/dev/null; then
+# Read-only commands without temporary storage can still run under numeric IDs.
+if [ -w /tmp ] && { ! getent passwd "$uid" >/dev/null || ! getent group "$gid" >/dev/null; }; then
     accounts=$(mktemp -d /tmp/autodeduct-accounts.XXXXXX)
     cp /etc/passwd /etc/group "$accounts/"
     if ! getent passwd "$uid" >/dev/null; then

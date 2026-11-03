@@ -119,10 +119,12 @@ under `/tmp`; it does not change IDs, `/etc/passwd`, or mounted file ownership.
 Without `--user`, the image retains its `dev` account; it does not infer a user
 from the mount. Host permissions and read-only mounts still apply.
 
-For `--read-only` containers, provide writable temporary storage with
-`--tmpfs /tmp:rw,nosuid,size=256m`. Agent and AcTa launches already do this and
-select your host UID/GID. `HOME=/home/dev` keeps the configured tools and provers
-available; it does not grant write access to their installed files.
+For name lookup in `--read-only` containers, add
+`--tmpfs /tmp:rw,nosuid,size=256m`. Without writable `/tmp`, commands still run
+but missing account names remain unresolved. Agent and AcTa launches already
+provide temporary storage and select your host UID/GID. `HOME=/home/dev` keeps
+the configured tools and provers available; it does not grant write access to
+their installed files.
 
 After updating the checkout, repeat the [standard image build](#standard-docker-image)
 and start a new container. Docker can reuse its cached toolchain layers;
