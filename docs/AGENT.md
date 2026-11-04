@@ -105,10 +105,13 @@ autodeduct agent --agent-runtime docker --timeout 1200 \
 
 The verifier image contains Python, libclang, LOGOS, Frama-C/WP and provers.
 `--agent-docker-image` defaults to the standard `auto-deduct:latest` image.
-AutoDeduct resolves its tag to an immutable image ID and extracts
+AutoDeduct resolves its tag to an immutable image ID, starts **one verifier
+container for the run**, and extracts
 `/opt/logos/skill/SKILL.md` into a temporary host folder outside the agent's
-output workspace. Codex reads that copy; the wrapper runs from the same image
-ID. No local LOGOS checkout, `--agent-skill` flag, or host wrapper installation is
+output workspace. Codex reads that copy on the host. Skill extraction,
+dependency checks and wrapper verification use `docker exec` in that same
+container; it waits while Codex generates contracts. No local LOGOS checkout,
+`--agent-skill` flag, or host wrapper installation is
 required. Docker mode always uses the image's skill, even if
 `AUTODEDUCT_AGENT_SKILL` or `--agent-skill` is set.
 
@@ -118,9 +121,13 @@ with the host UID/GID. The container has a read-only root filesystem, temporary
 `/tmp`, no added capabilities and no network access. Host libclang and Frama-C
 are unnecessary. AutoDeduct runs extraction and dependency checks before Codex,
 and annotation/verification after generation. Codex does not launch Docker.
+The launcher removes the container when the run succeeds, fails, times out,
+or is interrupted with Ctrl-C or SIGTERM. A cleanup failure is reported and
+prevents the run from being accepted as successful.
 
 The temporary skill folder is removed when the workflow ends. The run keeps
-`agent-skill.md` for review, and `agent-task.json` records its hash and the image ID.
+`agent-skill.md` for review, and `agent-task.json` records its hash, the image ID
+and the run's container ID.
 The temporary `skill` path recorded in that task is no longer present afterwards.
 
 Use `--agent-docker-image IMAGE` for a compatible alternate image and

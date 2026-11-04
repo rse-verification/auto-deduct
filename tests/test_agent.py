@@ -16,6 +16,7 @@ from autodeduct_pipeline.agent import validate_annotation_only, validate_agent_o
 SOURCE = "int helper(void)\n{\n    return 1;\n}\n/*@ ensures \\result == 1; */\nint main(void)\n{\n    return helper();\n}\n"
 ANNOTATED = "/*@ assigns \\nothing; ensures \\result == 1; */\n" + SOURCE
 IMAGE_ID = "sha256:" + "a" * 64
+CONTAINER_ID = "b" * 64
 IMAGE_SKILL = "Use the image's LOGOS contract skill. λόγος\n"
 
 
@@ -56,6 +57,16 @@ class AgentModeTests(unittest.TestCase):
                     return subprocess.CompletedProcess(command, 0, "invalid" if failure == "image_id" else IMAGE_ID + "\n", "")
                 if command[:2] == ["docker", "run"]:
                     self.assertIn(IMAGE_ID, command)
+                    self.assertIn("--detach", command)
+                    self.assertIn("--read-only", command)
+                    self.assertEqual(command[command.index("--network") + 1], "none")
+                    self.assertIn(f"type=bind,source={source.parent},target={source.parent},readonly", command)
+                    self.assertIn(f"type=bind,source={output},target={output}", command)
+                    self.assertNotIn("--privileged", command)
+                    self.assertFalse(any(".codex" in word or "docker.sock" in word for word in command))
+                    return subprocess.CompletedProcess(command, 0, CONTAINER_ID + "\n", "")
+                if command[:2] == ["docker", "exec"]:
+                    self.assertEqual(command[2], CONTAINER_ID)
                 if "-c" in command and "SKILL.md" in command[-1]:
                     self.assertNotIn("--mount", command)
                     if failure == "extraction_timeout":
@@ -81,6 +92,7 @@ class AgentModeTests(unittest.TestCase):
                     self.assertEqual(selected_skill.read_text(), expected_skill)
                     self.assertEqual(task["skill_sha256"], hashlib.sha256(expected_skill.encode()).hexdigest())
                     self.assertEqual(task["docker_image_id"], IMAGE_ID if runtime == "docker" else None)
+                    self.assertEqual(task["docker_container_id"], CONTAINER_ID if runtime == "docker" else None)
                     if runtime == "docker":
                         cached_skill = selected_skill
                         self.assertNotIn(output, selected_skill.parents)
@@ -109,14 +121,8 @@ class AgentModeTests(unittest.TestCase):
                         (output / "agent-skill.md").symlink_to(source)
                     return subprocess.CompletedProcess(command, 0, "generated contracts", "")
                 if runtime == "docker":
-                    self.assertEqual(command[:2], ["docker", "run"])
-                    self.assertIn("--read-only", command)
-                    self.assertEqual(command[command.index("--network") + 1], "none")
-                    self.assertIn(f"type=bind,source={source.parent},target={source.parent},readonly", command)
-                    self.assertIn(f"type=bind,source={output},target={output}", command)
+                    self.assertEqual(command[:3], ["docker", "exec", CONTAINER_ID])
                     self.assertIn("/opt/logos/skill/scripts/generate_acsl.py", command)
-                    self.assertNotIn("--privileged", command)
-                    self.assertFalse(any(".codex" in word or "docker.sock" in word for word in command))
                     if failure in {"timeout", "cleanup_failure"}:
                         raise subprocess.TimeoutExpired(command, 1)
                 else:
@@ -152,8 +158,13 @@ class AgentModeTests(unittest.TestCase):
                     b"", b"cannot connect to Docker daemon" if failure == "cleanup_failure" else b"",
                 )
                 report = run_pipeline(args)
-                if failure in {"timeout", "preflight_timeout", "extraction_timeout"}:
-                    self.assertEqual(cleanup.call_args.args[0][:3], ["docker", "rm", "--force"])
+                if runtime == "docker" and failure not in {"image", "image_id"}:
+                    cleanup.assert_called_once_with(
+                        ["docker", "rm", "--force", CONTAINER_ID],
+                        capture_output=True, timeout=10, check=False,
+                    )
+                else:
+                    cleanup.assert_not_called()
             self.assertEqual(source.read_text(), SOURCE)
             self.assertIsNone(report.contract_report)
             self.assertEqual(report.mode, "agent")
@@ -181,7 +192,7 @@ class AgentModeTests(unittest.TestCase):
                 report = self.exercise(runtime=runtime, failure="dependencies")
                 self.assertEqual(report.status, "failed")
                 self.assertEqual([stage.name for stage in report.stages],
-                                 (["logos_image", "logos_skill"] if runtime == "docker" else []) + ["logos_environment"])
+                                 (["logos_image", "logos_container", "logos_skill"] if runtime == "docker" else []) + ["logos_environment"])
                 self.assertEqual(report.errors[-1]["stage"], "environment")
                 self.assertIn("install Frama-C", report.errors[-1]["message"])
 
@@ -194,7 +205,7 @@ class AgentModeTests(unittest.TestCase):
         report = self.exercise(runtime="docker")
         self.assertEqual(report.status, "passed", report.errors)
         self.assertEqual([stage.name for stage in report.stages],
-                         ["logos_image", "logos_skill", "logos_environment", "agent_workflow", "logos_verify", "skill_verify"])
+                         ["logos_image", "logos_container", "logos_skill", "logos_environment", "agent_workflow", "logos_verify", "skill_verify"])
 
     def test_docker_image_and_skill_errors_stop_before_generation(self):
         for failure in ("image", "image_id", "extraction", "extraction_timeout", "empty_skill"):

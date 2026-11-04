@@ -26,8 +26,7 @@
             // Add the identifiers of the extensions you want installed.
             // Extension identifiers can be fount in the marketplace. 
             // "llvm-vs-code-extensions.vscode-clangd",
-            "scalameta.metals",
-            "ocamllabs.ocaml-platform" 
+            "scalameta.metals"
          ]
       }
    },

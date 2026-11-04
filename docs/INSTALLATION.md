@@ -28,10 +28,16 @@ cd auto-deduct
 ./bin/autodeduct --version
 ```
 
-From this directory, run `./bin/autodeduct ...` directly. For the short command:
+From this directory, run `./bin/autodeduct ...` directly. To use the short
+command on the host, first add the checkout's launcher to `PATH`:
 
 ```shell
 export PATH="$PWD/bin:$PATH"
+```
+
+Then run the version check as a separate command:
+
+```shell
 autodeduct --version
 ```
 
@@ -39,6 +45,8 @@ The export applies to the current terminal. For future sessions, add the absolut
 checkout `bin/` path to your shell's `PATH` setup. Installing only the Docker image
 is insufficient for Agent mode. The traditional Docker command runs the CLI inside
 the image and does not need a host CLI installation.
+Inside the built Docker image, `autodeduct` is already on `PATH`; no checkout
+`PATH` export is needed.
 
 Agent Docker mode extracts the LOGOS skill from its verifier image. A separate
 local LOGOS checkout is required only for local verification. The standard
