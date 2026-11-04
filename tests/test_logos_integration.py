@@ -97,15 +97,17 @@ class LogosDockerIntegrationTest(unittest.TestCase):
                 self.assertEqual(evidence["returncode"], 0)
                 self.assertEqual(evidence["verified"], expected_result == 1)
                 self.assertEqual([stage.name for stage in report.stages],
-                                 ["logos_image", "logos_skill", "logos_environment", "agent_workflow", "logos_verify", "skill_verify"])
-                self.assertEqual(report.stages[4].command[:2], ["docker", "run"])
-                self.assertEqual(report.stages[4].returncode, 0 if expected_result == 1 else 1)
+                                 ["logos_image", "logos_container", "logos_skill", "logos_environment", "agent_workflow", "logos_verify", "skill_verify"])
+                stages = {stage.name: stage for stage in report.stages}
+                self.assertEqual(stages["logos_verify"].command[:2], ["docker", "exec"])
+                self.assertEqual(stages["logos_verify"].returncode, 0 if expected_result == 1 else 1)
                 task = json.loads((output / "agent-task.json").read_text())
                 snapshot = output / "agent-skill.md"
                 self.assertEqual(task["skill_sha256"], hashlib.sha256(snapshot.read_bytes()).hexdigest())
                 self.assertFalse(Path(task["skill"]).exists())
-                for stage in (report.stages[1], report.stages[2], report.stages[4]):
-                    self.assertIn(task["docker_image_id"], stage.command)
+                self.assertIn(task["docker_image_id"], stages["logos_container"].command)
+                for stage in (stages["logos_skill"], stages["logos_environment"], stages["logos_verify"]):
+                    self.assertEqual(stage.command[:3], ["docker", "exec", task["docker_container_id"]])
                 self.assertEqual(evidence["source_sha256"], hashlib.sha256((output / "inferred.c").read_bytes()).hexdigest())
 
 

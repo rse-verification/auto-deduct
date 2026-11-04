@@ -52,6 +52,8 @@ GENERATED_OUTPUT_NAMES = frozenset({
     "cbmc.stderr.log",
     "logos_image.stdout.log",
     "logos_image.stderr.log",
+    "logos_container.stdout.log",
+    "logos_container.stderr.log",
     "logos_skill.stdout.log",
     "logos_skill.stderr.log",
     "agent-skill.md",
