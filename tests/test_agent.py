@@ -1,11 +1,13 @@
 """Offline checks of skill delegation and verifier evidence; no model calls."""
 
 import hashlib
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -21,6 +23,34 @@ IMAGE_SKILL = "Use the image's LOGOS contract skill. λόγος\n"
 
 
 class AgentModeTests(unittest.TestCase):
+    def test_progress_reports_stages_and_stops_after_generation_failure(self):
+        for failure in (None, "runner"):
+            with self.subTest(failure=failure):
+                progress = io.StringIO()
+                with redirect_stderr(progress):
+                    self.exercise(failure=failure)
+                lines = progress.getvalue().splitlines()
+                self.assertIn("Preparing LOGOS", lines[0])
+                self.assertIn("Codex is generating", lines[1])
+                if failure is None:
+                    self.assertIn("Contracts generated", lines[2])
+                    self.assertIn("Frama-C WP verification are running", lines[3])
+                else:
+                    self.assertEqual(len(lines), 2)
+
+    def test_completion_preserves_json_stdout(self):
+        from autodeduct_pipeline.pipeline import main
+        with redirect_stderr(io.StringIO()):
+            report = self.exercise()
+        output, progress = io.StringIO(), io.StringIO()
+        with patch("autodeduct_pipeline.pipeline.run_pipeline", return_value=report), patch(
+            "autodeduct_pipeline.pipeline.persist_report"
+        ), redirect_stdout(output), redirect_stderr(progress):
+            result = main(["agent", "--json", "input.c"])
+        self.assertEqual(result, 0)
+        self.assertEqual(json.loads(output.getvalue())["status"], "passed")
+        self.assertIn("Run complete: PASSED.", progress.getvalue())
+
     def setUp(self):
         guard = patch("autodeduct_pipeline.agent.in_container", return_value=False)
         guard.start()
