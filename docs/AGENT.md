@@ -209,6 +209,11 @@ is trusted software; these reports are not cryptographically certified proofs.
 
 ## Codex configuration
 
+Agent mode prints progress as setup completes, Codex generates contracts, and
+LOGOS annotates the source and runs Frama-C WP. A final message reports whether
+the run passed or failed. Progress goes to stderr, so `--json` keeps stdout as
+valid JSON.
+
 The default is `codex exec`. `--agent-runner COMMAND` or `AUTODEDUCT_AGENT_RUNNER`
 can select a Codex profile. The command receives Codex-specific arguments;
 other agents and direct APIs need an adapter. Commands execute without a shell;

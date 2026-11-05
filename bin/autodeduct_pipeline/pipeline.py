@@ -310,6 +310,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     except OSError as error:
         report.errors.append({"stage": "report", "message": str(error)})
         report.status = "failed"
+    if args.mode == "agent":
+        print(f"[agent] Run complete: {report.status.upper()}.", file=sys.stderr, flush=True)
     output = json.dumps(report_dict(report), indent=2) if args.json else None
     if output is not None:
         print(output)
