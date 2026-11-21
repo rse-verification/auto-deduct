@@ -22,6 +22,18 @@ CONTAINER_ID = "b" * 64
 IMAGE_SKILL = "Use the image's LOGOS contract skill. λόγος\n"
 
 
+class FrameRepairTests(unittest.TestCase):
+    def test_only_generated_unsupported_top_frame_is_removed(self):
+        from autodeduct_pipeline.agent import repair_generated_frames
+        bundle={'contracts':{'helper':{'assigns':[r'\everything'],'ensures':['result == 1']},
+                             'other':{'assigns':[r'\nothing']}}}
+        repairs=repair_generated_frames(bundle)
+        self.assertNotIn('assigns',bundle['contracts']['helper'])
+        self.assertEqual(bundle['contracts']['helper']['ensures'],['result == 1'])
+        self.assertEqual(bundle['contracts']['other']['assigns'],[r'\nothing'])
+        self.assertEqual(len(repairs),1)
+
+
 class AgentModeTests(unittest.TestCase):
     def test_progress_reports_stages_and_stops_after_generation_failure(self):
         for failure in (None, "runner"):
